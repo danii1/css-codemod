@@ -71,15 +71,20 @@ export const globalCssToCssModule: Codemod = context => {
 
     const sourceCss = fs.readFileSync(cssFilePath, 'utf8')
     const exportNameMap = await getCssModuleExportNameMap(sourceCss)
-    const { css: cssModuleSource, filePath: cssModuleFileName } = await transformFileToCssModule({
-      sourceCss,
-      sourceFilePath: cssFilePath,
-    })
+
+    // Generate a potential CSS module filename for the transformComponentFile check
+    const { dir, name } = path.parse(cssFilePath)
+    const cssModuleFileName = path.join(dir, `${name}.module.css`)
 
     const wasTransformed = transformComponentFile({ tsSourceFile, exportNameMap, cssModuleFileName })
 
-    // Only add imports and modify the file if transformation actually occurred
+    // Only create CSS module and process files if transformation was successful
     if (wasTransformed) {
+      const { css: cssModuleSource, filePath: actualCssModuleFileName } = await transformFileToCssModule({
+        sourceCss,
+        sourceFilePath: cssFilePath,
+      })
+
       addClassNamesUtilImportIfNeeded(tsSourceFile)
 
       // Remove the original CSS import if it exists
@@ -91,51 +96,59 @@ export const globalCssToCssModule: Codemod = context => {
 
       tsSourceFile.addImportDeclaration({
         defaultImport: STYLES_IDENTIFIER,
-        moduleSpecifier: `./${path.parse(cssModuleFileName).base}`,
+        moduleSpecifier: `./${path.parse(actualCssModuleFileName).base}`,
       })
 
       if (shouldFormat) {
         formatWithPrettierEslint(tsSourceFile)
       }
+
+      const formattedCssModuleSource = await formatWithStylelint(cssModuleSource, cssFilePath)
+
+      /**
+       * If `shouldWriteFiles` is true:
+       *
+       * 1. Update TS file with a new source that uses CSS module.
+       * 2. Create a new CSS module file.
+       * 3. Delete redundant CSS file that's replaced with CSS module.
+       */
+      const fsWritePromise = shouldWriteFiles
+        ? Promise.all([
+          tsSourceFile.save(),
+          fs.writeFile(actualCssModuleFileName, formattedCssModuleSource),
+          fs.delete(cssFilePath),
+        ])
+        : undefined
+
+      return {
+        target: tsSourceFile,
+        manualChangesReported: {},
+        fsWritePromise,
+        files: [
+          {
+            source: formattedCssModuleSource,
+            path: path.resolve(parsedTsFilePath.dir, actualCssModuleFileName),
+          },
+          {
+            source: tsSourceFile.getFullText(),
+            path: tsSourceFile.getFilePath(),
+          },
+        ],
+      }
     }
-
-    const formattedCssModuleSource = await formatWithStylelint(cssModuleSource, cssFilePath)
-
-    /**
-     * If `shouldWriteFiles` is true:
-     *
-     * 1. Update TS file with a new source that uses CSS module (only if transformed).
-     * 2. Create a new CSS module file (only if transformed).
-     * 3. Delete redundant CSS file that's replaced with CSS module (only if transformed).
-     */
-    const fsWritePromise = shouldWriteFiles && wasTransformed
-      ? Promise.all([
-        tsSourceFile.save(),
-        fs.writeFile(cssModuleFileName, formattedCssModuleSource),
-        fs.delete(cssFilePath),
-      ])
-      : undefined
-
+    // Transformation was skipped, return only the original TypeScript file
     return {
       target: tsSourceFile,
       manualChangesReported: {},
-      fsWritePromise,
-      files: wasTransformed ? [
-        {
-          source: formattedCssModuleSource,
-          path: path.resolve(parsedTsFilePath.dir, cssModuleFileName),
-        },
-        {
-          source: tsSourceFile.getFullText(),
-          path: tsSourceFile.getFilePath(),
-        },
-      ] : [
+      fsWritePromise: undefined,
+      files: [
         {
           source: tsSourceFile.getFullText(),
           path: tsSourceFile.getFilePath(),
         },
       ],
     }
+
   })
 
   return Promise.all(codemodResultPromises)

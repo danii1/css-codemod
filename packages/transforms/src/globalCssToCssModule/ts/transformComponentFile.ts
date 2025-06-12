@@ -30,6 +30,37 @@ function hasDynamicClassNames(sourceFile: SourceFile): boolean {
   return templateExpressions.length > 0
 }
 
+/**
+ * Check which CSS classes are used in the component without modifying the source file.
+ */
+function getUsageStats(tsSourceFile: SourceFile, exportNameMap: Record<string, string>): Record<string, boolean> {
+  const usageStats = Object.fromEntries(
+    Object.keys(exportNameMap).map(className => {
+      return [className, false]
+    })
+  )
+
+  // Get all className nodes and check which classes are used
+  const nodesWithClassName = getNodesWithClassName(tsSourceFile)
+
+  for (const nodeWithClassName of nodesWithClassName) {
+    const classNameStringValue =
+      nodeWithClassName.getKind() === SyntaxKind.StringLiteral
+        ? (nodeWithClassName as any).getLiteralText()
+        : nodeWithClassName.getText()
+
+    // Split class names and mark used ones
+    const classNames = classNameStringValue.split(' ')
+    for (const className of classNames) {
+      if (exportNameMap[className]) {
+        usageStats[className] = true
+      }
+    }
+  }
+
+  return usageStats
+}
+
 export function transformComponentFile(options: TransformComponentFileOptions): boolean {
   const { tsSourceFile, exportNameMap, cssModuleFileName } = options
 
@@ -39,8 +70,26 @@ export function transformComponentFile(options: TransformComponentFileOptions): 
     return false
   }
 
-  // Object to collect CSS classes usage and report unused classes after the codemod.
-  const usageStats = Object.fromEntries(
+  // Check for unused classes BEFORE doing any transformations
+  const usageStats = getUsageStats(tsSourceFile, exportNameMap)
+
+  const unusedClassNames = Object.entries(usageStats)
+    .map(([className, isUsed]) => {
+      return isUsed ? undefined : className
+    })
+    .filter(isDefined)
+
+  if (unusedClassNames.length > 0) {
+    signale.warn(
+      `Skipping transformation of ${tsSourceFile.getFilePath()} - contains unused CSS classes that might be used elsewhere.`,
+      `\nUnused classes: ${unusedClassNames.join(', ')}`,
+      '\nPlease extract these classes to a separate CSS file or remove them before running the transformation.'
+    )
+    return false
+  }
+
+  // Object to collect CSS classes usage during the actual transformation.
+  const transformUsageStats = Object.fromEntries(
     Object.keys(exportNameMap).map(className => {
       return [className, false]
     })
@@ -51,20 +100,10 @@ export function transformComponentFile(options: TransformComponentFileOptions): 
   while (!areAllNodesProcessed) {
     // `processNodesWithClassName` returns `true` when there's nothing more to process.
     areAllNodesProcessed = processNodesWithClassName({
-      usageStats,
+      usageStats: transformUsageStats,
       exportNameMap,
       nodesWithClassName: getNodesWithClassName(tsSourceFile),
     })
-  }
-
-  const unusedClassNames = Object.entries(usageStats)
-    .map(([className, isUsed]) => {
-      return isUsed ? undefined : className
-    })
-    .filter(isDefined)
-
-  if (unusedClassNames.length > 0) {
-    signale.warn(`Unused CSS classes in ${cssModuleFileName}`, unusedClassNames)
   }
 
   return true
