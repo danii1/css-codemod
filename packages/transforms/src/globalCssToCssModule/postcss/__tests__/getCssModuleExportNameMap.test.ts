@@ -30,7 +30,7 @@ describe('getCssModuleExportNameMap', () => {
 
     expect(exportNameMap).toEqual({
       'repo-header': 'repoHeader',
-      'repo-header__button': 'button',
+      'repo-header__button': 'repoHeaderButton',
       'repo-header--alert': 'repoHeaderAlert',
       'navbar-nav': 'navbarNav',
       spacer: 'spacer',

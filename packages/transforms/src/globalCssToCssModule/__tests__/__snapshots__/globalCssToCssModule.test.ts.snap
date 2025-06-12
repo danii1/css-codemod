@@ -14,12 +14,12 @@ exports[`globalCssToCssModule handles PascalCase class names correctly 1`] = `
     margin-top: 20px;
 }
     
-.title {
+.contactHeaderTitle {
     font-size: 18px;
     font-weight: bold;
 }
     
-.avatar {
+.userProfileAvatar {
     width: 40px;
     height: 40px;
     border-radius: 50%;
@@ -34,10 +34,10 @@ import styles from './ComponentWithPascalCase.module.css'
 export const ComponentWithPascalCase = () => {
     return (
         <div className={styles.contactHeader}>
-            <div className={styles.title}>Contact Information</div>
+            <div className={styles.contactHeaderTitle}>Contact Information</div>
             <div className={styles.contactHeaderActive}>Active state</div>
             <div className={styles.userProfile}>User Profile</div>
-            <div className={styles.avatar}>Avatar</div>
+            <div className={styles.userProfileAvatar}>Avatar</div>
         </div>
     )
 }
@@ -258,7 +258,7 @@ exports[`globalCssToCssModule transforms correctly 1`] = `
     border-style: solid;
 }
 
-.logo {
+.repoHeaderLogo {
     display: flex;
 }
 "
@@ -281,7 +281,7 @@ export const MyComponent = () => {
                     [classNames(styles.kek, styles.kekWow)]: isActive,
                 })}
             ></div>
-            It's a component<p className={styles.logo}>wow</p>
+            It's a component<p className={styles.repoHeaderLogo}>wow</p>
             <div className={styles.repoHeader}>Another one!</div>
         </div>
     )

@@ -152,10 +152,10 @@ describe('globalCssToCssModule', () => {
 
       // Check that PascalCase class names are converted to camelCase
       expect(reactComponent.source).toContain('styles.contactHeader')
-      expect(reactComponent.source).toContain('styles.title')
+      expect(reactComponent.source).toContain('styles.contactHeaderTitle')
       expect(reactComponent.source).toContain('styles.contactHeaderActive')
       expect(reactComponent.source).toContain('styles.userProfile')
-      expect(reactComponent.source).toContain('styles.avatar')
+      expect(reactComponent.source).toContain('styles.userProfileAvatar')
 
       // Check that CSS class names are converted to lowercase/camelCase
       expect(cssModule.source).toContain('.contactHeader')

@@ -20,7 +20,7 @@ interface TransformComponentFileOptions {
 function hasDynamicClassNames(sourceFile: SourceFile): boolean {
   const jsxAttributes = sourceFile.getDescendantsOfKind(SyntaxKind.JsxAttribute)
   const classNameJsxAttributes = jsxAttributes.filter(identifier => {
-    return identifier.getName() === 'className'
+    return /classnames?$/i.test(identifier.getName())
   })
 
   // Check for template expressions (template literals with dynamic parts)

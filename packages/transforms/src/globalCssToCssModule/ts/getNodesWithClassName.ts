@@ -3,7 +3,7 @@ import { StringLiteral, Identifier, TemplateExpression, NoSubstitutionTemplateLi
 export function getNodesWithClassName(sourceFile: SourceFile): (Identifier | StringLiteral | TemplateExpression | NoSubstitutionTemplateLiteral)[] {
   const jsxAttributes = sourceFile.getDescendantsOfKind(SyntaxKind.JsxAttribute)
   const classNameJsxAttributes = jsxAttributes.filter(identifier => {
-    return identifier.getName() === 'className'
+    return /classnames?$/i.test(identifier.getName())
   })
 
   // <div className={classNames({ kek: isActive })} /> — 'kek' is an `Identifier` inside of the `PropertyAssignment`.

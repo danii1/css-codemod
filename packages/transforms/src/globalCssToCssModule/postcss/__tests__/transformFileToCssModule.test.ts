@@ -71,7 +71,7 @@ describe('transformFileToCssModule', () => {
                         white-space: nowrap;
                     }
 
-                    &:disabled .button {
+                    &:disabled .repoHeaderButton {
                         display: none;
                     }
 
@@ -87,7 +87,7 @@ describe('transformFileToCssModule', () => {
                 }
 
                 /* &__button comment*/
-                .button {
+                .repoHeaderButton {
                     margin-top: 1px;
                 }
         `

@@ -3,7 +3,6 @@ import CssModuleLoaderCore, { Source } from 'css-modules-loader-core'
 import postcssNested from 'postcss-nested'
 
 import { createCssProcessor } from './createCssProcessor'
-import { getPrefixesToRemove, removePrefixFromExportNameIfNeeded } from './exportNameMapPrefixes'
 import { postcssToCssModulePlugin } from './postcssToCssModulePlugin'
 
 const EXPORT_NAME_PREFIX = 'prefix'
@@ -92,22 +91,24 @@ export async function getCssModuleExportNameMap(sourceCss: string): Promise<Reco
    * ```
    */
   const initialExportNameMap = Object.fromEntries<string>(exportNameClassNamePairs)
-  const prefixesToRemove = getPrefixesToRemove(initialExportNameMap)
 
-  const exportNameMapPairs: [string, string][] = Object.entries(initialExportNameMap).map(
-    ([className, exportName]) => {
-      const exportNameWithoutPrefix = removePrefixFromExportNameIfNeeded({
-        className,
-        exportName,
-        prefixesToRemove,
-      })
+  // Disable prefix removal to avoid bugs with nested classes
+  // const prefixesToRemove = getPrefixesToRemove(initialExportNameMap)
 
-      return [className, exportNameWithoutPrefix]
-    }
-  )
+  // const exportNameMapPairs: [string, string][] = Object.entries(initialExportNameMap).map(
+  //   ([className, exportName]) => {
+  //     const exportNameWithoutPrefix = removePrefixFromExportNameIfNeeded({
+  //       className,
+  //       exportName,
+  //       prefixesToRemove,
+  //     })
+
+  //     return [className, exportNameWithoutPrefix]
+  //   }
+  // )
 
   /**
-   * Export name map _with_ removed nesting of the selectors:
+   * Export name map without prefix removal:
    *
    * ```scss
    * .menu {
@@ -120,9 +121,9 @@ export async function getCssModuleExportNameMap(sourceCss: string): Promise<Reco
    * ```ts
    * {
    *     menu: 'menu',
-   *     menu__button: 'button'
+   *     menu__button: 'menuButton'
    * }
    * ```
    */
-  return Object.fromEntries<string>(exportNameMapPairs)
+  return initialExportNameMap
 }

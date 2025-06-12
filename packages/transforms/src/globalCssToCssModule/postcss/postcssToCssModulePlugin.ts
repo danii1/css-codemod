@@ -110,7 +110,7 @@ function updateChildSelectors(parent: Rule, child: Rule): string[] {
   const updatedChildSelectors = child.selectors.reduce<string[]>((result, selectorString) => {
     if (selectorString.length !== 0) {
       const selectorNode = parse(selectorString, child)
-      shouldRemoveNesting = replaceSelectorNodesIfNeeded(selectorNode)
+      shouldRemoveNesting = replaceSelectorNodesIfNeeded(selectorNode, parent.selector)
 
       result.push(selectorNode.toString())
     }
@@ -149,7 +149,7 @@ function updateChildSelectors(parent: Rule, child: Rule): string[] {
   return updatedChildSelectors
 }
 
-function replaceSelectorNodesIfNeeded(nodes: Selector): boolean {
+function replaceSelectorNodesIfNeeded(nodes: Selector, parentSelector: string): boolean {
   return nodes.reduce<boolean>((shouldRemoveNesting, node, index) => {
     /**
      * Assume that all nested classes and ids not starting with `&` are global:
@@ -182,22 +182,30 @@ function replaceSelectorNodesIfNeeded(nodes: Selector): boolean {
         } else if (nextNodeValue.startsWith('__')) {
           /**
            * Remove nesting for selectors starting from `__`
+           * Convert the full parent + child selector to camelCase
            *
            * ```scss
-           * .menu {
-           *   ...
-           *
-           *   &__button { ... }
+           * .rich-editor__merge-tag {
+           *   &__fallback-popup { ... }
            * }
            *
            * Turns into:
            *
-           * .menu { ... }
-           * .button { ... }
+           * .richEditorMergeTag { ... }
+           * .richEditorMergeTagFallbackPopup { ... }
            * ```
            */
+
+          // Get the parent selector (e.g., ".rich-editor__merge-tag")
+          const parentClassName = parentSelector.replace(/^\./, '') // Remove leading dot
+
+          // Combine parent + child and convert to camelCase
+          const fullClassName = parentClassName + nextNodeValue
+          const camelCaseClassName = convertToCamelCase(fullClassName)
+
+          // Replace the nesting with the full camelCase class name
           node.replaceWith(parse(''))
-          nextNode.replaceWith(parse(nextNodeValue.replace('__', '.')))
+          nextNode.replaceWith(parse('.' + camelCaseClassName))
 
           /**
            * If its not the first node of the selector — keep nesting in place
@@ -212,7 +220,7 @@ function replaceSelectorNodesIfNeeded(nodes: Selector): boolean {
            *
            * ```scss
            * .menu {
-           *   &:hover .button { ... }
+           *   &:hover .menuButton { ... }
            * }
            * ```
            */
