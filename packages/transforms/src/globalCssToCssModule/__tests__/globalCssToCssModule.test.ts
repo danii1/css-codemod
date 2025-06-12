@@ -168,4 +168,257 @@ describe('globalCssToCssModule', () => {
     }
   }, 15000)
 
+  it('skips transformation when no CSS module classes would be created', async () => {
+    const project = new Project()
+
+    // Create a component that has ONLY global classes
+    const tsFile = project.createSourceFile('ComponentWithOnlyGlobalClasses.tsx', `
+import React from 'react'
+
+export const ComponentWithOnlyGlobalClasses = () => {
+    return (
+        <div className="d-flex justify-content-center">
+            <p className="text-primary mb-3">Title with only global classes</p>
+            <button className="btn btn-primary">Button with only Bootstrap classes</button>
+        </div>
+    )
+}
+`)
+
+    // Create an empty CSS file - this will trigger our new guardrail 
+    // since no CSS module classes would be created
+    const cssFile = project.createSourceFile('ComponentWithOnlyGlobalClasses.css', `
+/* Empty CSS file - no classes defined */
+`)
+
+    // Mock file system
+    const mockFs = {
+      fileExistsSync: (path: string) => { return path.includes('ComponentWithOnlyGlobalClasses.css') },
+      readFileSync: (path: string) => {
+        if (path.includes('ComponentWithOnlyGlobalClasses.css')) {
+          return cssFile.getFullText()
+        }
+        return ''
+      },
+      writeFile: jest.fn(),
+      delete: jest.fn(),
+    }
+
+    project.getFileSystem = () => { return mockFs as any }
+
+    const [result] = await globalCssToCssModule({
+      project,
+      shouldWriteFiles: false,
+      shouldFormat: false
+    })
+
+    expect(result.files).toBeTruthy()
+
+    if (result.files) {
+      // Should only return the original TypeScript file, no CSS module
+      expect(result.files).toHaveLength(1)
+      const [reactComponent] = result.files
+
+      // Should NOT import CSS module
+      expect(reactComponent.source).not.toContain('import styles from "./ComponentWithOnlyGlobalClasses.module.css"')
+
+      // Should NOT transform any class names - they should remain as strings
+      expect(reactComponent.source).toContain('className="d-flex justify-content-center"')
+      expect(reactComponent.source).toContain('className="text-primary mb-3"')
+      expect(reactComponent.source).toContain('className="btn btn-primary"')
+
+      // Should NOT add classNames import since no transformation occurred
+      expect(reactComponent.source).not.toContain('import classNames from "classnames"')
+
+      // The file should be exactly the same as the original
+      expect(reactComponent.source.trim()).toBe(tsFile.getFullText().trim())
+    }
+  }, 15000)
+
+  it('skips transformation when global class names would remain (mixed usage)', async () => {
+    const project = new Project()
+
+    // Create a component that has BOTH CSS module classes AND global classes
+    const tsFile = project.createSourceFile('ComponentWithMixedClasses.tsx', `
+import React from 'react'
+
+export const ComponentWithMixedClasses = () => {
+    return (
+        <div className="my-component d-flex">
+            <p className="my-component__title text-primary">Title with mixed classes</p>
+            <button className="my-component__button btn btn-primary">Button with mixed classes</button>
+        </div>
+    )
+}
+`)
+
+    // Create CSS file that defines SOME of the classes (CSS module classes)
+    // while others remain global (d-flex, text-primary, btn, btn-primary)
+    // This should now be BLOCKED by our stricter guardrail
+    const cssFile = project.createSourceFile('ComponentWithMixedClasses.css', `
+.my-component {
+    display: block;
+    padding: 16px;
+}
+
+.my-component__title {
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.my-component__button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+}
+`)
+
+    // Mock file system
+    const mockFs = {
+      fileExistsSync: (path: string) => { return path.includes('ComponentWithMixedClasses.css') },
+      readFileSync: (path: string) => {
+        if (path.includes('ComponentWithMixedClasses.css')) {
+          return cssFile.getFullText()
+        }
+        return ''
+      },
+      writeFile: jest.fn(),
+      delete: jest.fn(),
+    }
+
+    project.getFileSystem = () => { return mockFs as any }
+
+    const [result] = await globalCssToCssModule({
+      project,
+      shouldWriteFiles: false,
+      shouldFormat: false
+    })
+
+    expect(result.files).toBeTruthy()
+
+    if (result.files) {
+      // Should only return the original TypeScript file, no CSS module (transformation blocked)
+      expect(result.files).toHaveLength(1)
+      const [reactComponent] = result.files
+
+      // Should NOT import CSS module
+      expect(reactComponent.source).not.toContain('import styles from "./ComponentWithMixedClasses.module.css"')
+
+      // Should NOT transform any class names - they should remain as strings
+      expect(reactComponent.source).toContain('className="my-component d-flex"')
+      expect(reactComponent.source).toContain('className="my-component__title text-primary"')
+      expect(reactComponent.source).toContain('className="my-component__button btn btn-primary"')
+
+      // Should NOT add classNames import since no transformation occurred
+      expect(reactComponent.source).not.toContain('import classNames from "classnames"')
+
+      // The file should be exactly the same as the original
+      expect(reactComponent.source.trim()).toBe(tsFile.getFullText().trim())
+    }
+  }, 15000)
+
+  it('allows transformation when all classes are defined in CSS module', async () => {
+    const project = new Project()
+
+    // Create a component where ALL classes are defined in the CSS file
+    const tsFile = project.createSourceFile('ComponentWithAllCssModuleClasses.tsx', `
+import React from 'react'
+
+export const ComponentWithAllCssModuleClasses = () => {
+    return (
+        <div className="container">
+            <h1 className="title">Welcome</h1>
+            <p className="description">This component only uses CSS module classes</p>
+            <button className="button primary">Click me</button>
+        </div>
+    )
+}
+`)
+
+    // Create CSS file that defines ALL classes used in the component
+    const cssFile = project.createSourceFile('ComponentWithAllCssModuleClasses.css', `
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.title {
+    font-size: 24px;
+    font-weight: bold;
+    margin-bottom: 16px;
+}
+
+.description {
+    font-size: 16px;
+    color: #666;
+    margin-bottom: 20px;
+}
+
+.button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.primary {
+    background-color: #007bff;
+    color: white;
+}
+`)
+
+    // Mock file system
+    const mockFs = {
+      fileExistsSync: (path: string) => { return path.includes('ComponentWithAllCssModuleClasses.css') },
+      readFileSync: (path: string) => {
+        if (path.includes('ComponentWithAllCssModuleClasses.css')) {
+          return cssFile.getFullText()
+        }
+        return ''
+      },
+      writeFile: jest.fn(),
+      delete: jest.fn(),
+    }
+
+    project.getFileSystem = () => { return mockFs as any }
+
+    const [result] = await globalCssToCssModule({
+      project,
+      shouldWriteFiles: false,
+      shouldFormat: false
+    })
+
+    expect(result.files).toBeTruthy()
+
+    if (result.files) {
+      // Should return both CSS module and transformed TypeScript file
+      expect(result.files).toHaveLength(2)
+      const [cssModule, reactComponent] = result.files
+
+      // Should import CSS module
+      expect(reactComponent.source).toContain('import styles from "./ComponentWithAllCssModuleClasses.module.css"')
+
+      // Should transform all classes to CSS module references
+      expect(reactComponent.source).toContain('styles.container')
+      expect(reactComponent.source).toContain('styles.title')
+      expect(reactComponent.source).toContain('styles.description')
+      expect(reactComponent.source).toContain('styles.button')
+      expect(reactComponent.source).toContain('styles.primary')
+
+      // Should NOT contain any string literals for class names
+      expect(reactComponent.source).not.toContain('className="container"')
+      expect(reactComponent.source).not.toContain('className="title"')
+      expect(reactComponent.source).not.toContain('className="description"')
+      expect(reactComponent.source).not.toContain('className="button primary"')
+
+      // CSS module should be created with all classes
+      expect(cssModule.source).toContain('.container')
+      expect(cssModule.source).toContain('.title')
+      expect(cssModule.source).toContain('.description')
+      expect(cssModule.source).toContain('.button')
+      expect(cssModule.source).toContain('.primary')
+    }
+  }, 15000)
+
 })

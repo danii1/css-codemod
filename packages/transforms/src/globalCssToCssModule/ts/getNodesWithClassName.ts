@@ -16,7 +16,9 @@ export function getNodesWithClassName(sourceFile: SourceFile): (Identifier | Str
     })
 
   // <div className='kek' /> — 'kek' is a `StringLiteral` inside  of the `JsxAttribute`.
-  const stringLiterals = sourceFile.getDescendantsOfKind(SyntaxKind.StringLiteral)
+  const stringLiterals = classNameJsxAttributes.flatMap(classNameJsxAttribute => {
+    return classNameJsxAttribute.getDescendantsOfKind(SyntaxKind.StringLiteral)
+  })
 
   // <div className={`kek kek--${variant}`} /> — template expressions in className attributes
   const templateExpressions = classNameJsxAttributes.flatMap(classNameJsxAttribute => {

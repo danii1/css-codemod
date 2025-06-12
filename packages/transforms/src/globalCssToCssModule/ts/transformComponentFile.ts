@@ -5,6 +5,7 @@ import { isDefined } from '@sourcegraph/codemod-common'
 
 import { getNodesWithClassName } from './getNodesWithClassName'
 import { processNodesWithClassName } from './processNodesWithClassName'
+import { splitClassName } from './splitClassName'
 
 interface TransformComponentFileOptions {
   tsSourceFile: SourceFile
@@ -68,6 +69,50 @@ function getUsageStats(tsSourceFile: SourceFile, exportNameMap: Record<string, s
   return usageStats
 }
 
+/**
+ * Check if the transformation would result in global class names remaining in the TSX file.
+ * This function simulates the transformation process without modifying the source file.
+ */
+function hasGlobalClassNamesAfterTransformation(tsSourceFile: SourceFile, exportNameMap: Record<string, string>): { hasGlobalClasses: boolean; globalClasses: string[] } {
+  const nodesWithClassName = getNodesWithClassName(tsSourceFile)
+  const globalClasses: string[] = []
+
+  for (const nodeWithClassName of nodesWithClassName) {
+    let classNameStringValue: string
+
+    if (nodeWithClassName.getKind() === SyntaxKind.StringLiteral) {
+      classNameStringValue = (nodeWithClassName as any).getLiteralText()
+    } else if (nodeWithClassName.getKind() === SyntaxKind.NoSubstitutionTemplateLiteral) {
+      // For template literals without substitutions, get the raw text content
+      classNameStringValue = (nodeWithClassName as any).compilerNode.rawText || ''
+    } else {
+      // For other types (identifiers, template expressions with substitutions)
+      // Skip these as they might contain dynamic content that we can't analyze
+      continue
+    }
+
+    // Check what would remain after transformation
+    const { leftOverClassnames } = splitClassName({
+      className: classNameStringValue,
+      exportNameMap,
+      usageStats: {}, // We don't need to track usage for this check
+    })
+
+    // Collect any leftover class names (global classes)
+    for (const leftOverClass of leftOverClassnames) {
+      const trimmedClass = leftOverClass.trim()
+      if (trimmedClass !== '' && !globalClasses.includes(trimmedClass)) {
+        globalClasses.push(trimmedClass)
+      }
+    }
+  }
+
+  return {
+    hasGlobalClasses: globalClasses.length > 0,
+    globalClasses
+  }
+}
+
 export function transformComponentFile(options: TransformComponentFileOptions): boolean {
   const { tsSourceFile, exportNameMap } = options
 
@@ -91,6 +136,19 @@ export function transformComponentFile(options: TransformComponentFileOptions): 
       `Skipping transformation of ${tsSourceFile.getFilePath()} - contains unused CSS classes that might be used elsewhere.`,
       `\nUnused classes: ${unusedClassNames.join(', ')}`,
       '\nPlease extract these classes to a separate CSS file or remove them before running the transformation.'
+    )
+    return false
+  }
+
+  // Check if transformation would result in global class names remaining
+  const { hasGlobalClasses, globalClasses } = hasGlobalClassNamesAfterTransformation(tsSourceFile, exportNameMap)
+
+  if (hasGlobalClasses) {
+    signale.warn(
+      `Skipping transformation of ${tsSourceFile.getFilePath()} - transformation would result in global class names remaining.`,
+      '\nAll class names in the component must have corresponding CSS module exports for transformation to proceed.',
+      '\nPlease ensure all class names are defined in the CSS file, or extract global classes to a separate file.',
+      `\nGlobal classes remaining: ${globalClasses.join(', ')}`
     )
     return false
   }

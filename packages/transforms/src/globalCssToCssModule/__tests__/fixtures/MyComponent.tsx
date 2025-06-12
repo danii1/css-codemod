@@ -5,15 +5,15 @@ export const MyComponent = () => {
     const isActive = true
 
     return (
-        <div className="kek kek--wow d-flex m-1">
+        <div className="kek kek--wow">
             <div
-                className={classNames('m-1', true ? 'kek' : false, 'd-flex', {
+                className={classNames(true ? 'kek' : false, {
                     kek: false,
-                    'd-flex mr-1 kek': isActive,
+                    'kek kek--wow': isActive,
                 })}
             ></div>
             It's a component<p className="repo-header__logo">wow</p>
-            <div className="m-2 repo-header d-flex m-1">Another one!</div>
+            <div className="repo-header">Another one!</div>
         </div>
     )
 }
