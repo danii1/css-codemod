@@ -52,7 +52,7 @@ describe('transformFileToCssModule', () => {
 
     const expectedCssModuleSource = `
                 /* .repo-header comment*/
-                .repo-header {
+                .repoHeader {
                     flex: none;
 
                     &:hover {

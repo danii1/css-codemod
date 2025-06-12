@@ -1,0 +1,23 @@
+.ContactHeader {
+    display: flex;
+    padding: 16px;
+    
+    &__title {
+        font-size: 18px;
+        font-weight: bold;
+    }
+    
+    &--active {
+        background-color: #007acc;
+    }
+}
+
+.UserProfile {
+    margin-top: 20px;
+    
+    &__avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+    }
+} 

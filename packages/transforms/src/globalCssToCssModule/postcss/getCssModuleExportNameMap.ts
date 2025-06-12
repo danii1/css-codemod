@@ -15,7 +15,6 @@ const sourceCssToClassNames = (source: Source): Promise<Core.Result> => {
   return cssModulesLoaderCore.load(source, EXPORT_NAME_PREFIX, undefined, noOpPathFetcher)
 }
 
-const removeCssNestingProcessor = createCssProcessor(postcssNested)
 const transformToCssModuleProcessor = createCssProcessor(postcssNested, postcssToCssModulePlugin())
 
 /**
@@ -35,17 +34,20 @@ export async function getCssModuleExportNameMap(sourceCss: string): Promise<Reco
   const transformedResult = await transformToCssModuleProcessor(sourceCss)
   const classNames = await sourceCssToClassNames(transformedResult.css)
 
-  // Create a reverse mapping from camelCase back to original underscore/hyphen names
+  // Create a reverse mapping from camelCase back to original class names
+  // We need to first expand the nested CSS to get all the actual class names
   const camelCaseToOriginalMap = new Map<string, string>()
 
-  // Extract original class names from source CSS, but skip those inside :global() selectors
-  const originalClassMatches = sourceCss.match(/\.([A-Z_a-z][\w-]*)/g) || []
-  for (const match of originalClassMatches) {
+  // First, expand the nested CSS to get all actual class names
+  const expandedCssResult = await createCssProcessor(postcssNested)(sourceCss)
+  const expandedClassMatches = expandedCssResult.css.match(/\.([A-Z_a-z][\w-]*)/g) || []
+
+  for (const match of expandedClassMatches) {
     const originalClassName = match.slice(1) // Remove the dot
 
     // Skip class names that are inside :global() selectors
-    const matchIndex = sourceCss.indexOf(match)
-    const beforeMatch = sourceCss.slice(0, Math.max(0, matchIndex))
+    const matchIndex = expandedCssResult.css.indexOf(match)
+    const beforeMatch = expandedCssResult.css.slice(0, Math.max(0, matchIndex))
     const lastGlobalStart = beforeMatch.lastIndexOf(':global(')
     const lastGlobalEnd = beforeMatch.lastIndexOf(')')
 
@@ -54,7 +56,7 @@ export async function getCssModuleExportNameMap(sourceCss: string): Promise<Reco
       continue
     }
 
-    if (originalClassName.includes('_') || originalClassName.includes('-')) {
+    if (originalClassName.includes('_') || originalClassName.includes('-') || /^[A-Z]/.test(originalClassName)) {
       const camelCaseClassName = convertToCamelCase(originalClassName)
       camelCaseToOriginalMap.set(camelCaseClassName, originalClassName)
     }

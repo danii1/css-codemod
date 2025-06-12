@@ -1,5 +1,49 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
+exports[`globalCssToCssModule handles PascalCase class names correctly 1`] = `
+".contactHeader {
+    display: flex;
+    padding: 16px;
+    
+    &--active {
+        background-color: #007acc;
+    }
+}
+    
+.userProfile {
+    margin-top: 20px;
+}
+    
+.title {
+    font-size: 18px;
+    font-weight: bold;
+}
+    
+.avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+} "
+`;
+
+exports[`globalCssToCssModule handles PascalCase class names correctly 2`] = `
+"// @ts-nocheck
+import React from 'react'
+import styles from './ComponentWithPascalCase.module.css'
+
+export const ComponentWithPascalCase = () => {
+    return (
+        <div className={styles.contactHeader}>
+            <div className={styles.title}>Contact Information</div>
+            <div className={styles.contactHeaderActive}>Active state</div>
+            <div className={styles.userProfile}>User Profile</div>
+            <div className={styles.avatar}>Avatar</div>
+        </div>
+    )
+}
+"
+`;
+
 exports[`globalCssToCssModule handles hyphen-separated class names correctly 1`] = `
 ".playlistStatsUser {
     display: flex;
@@ -188,24 +232,34 @@ export const ComponentWithCssImport = () => {
 `;
 
 exports[`globalCssToCssModule transforms correctly 1`] = `
-"// @ts-nocheck
-import React from 'react'
+"
 
-export const MyComponent = () => {
-    const isActive = true
+/* Woah! */
+.kek {
+    color: red;
 
-    return (
-        <div className=\\"kek kek--wow d-flex m-1\\">
-            <div
-                className={classNames('m-1', true ? 'kek' : false, 'd-flex', {
-                    kek: false,
-                    'd-flex mr-1 kek': isActive,
-                })}
-            ></div>
-            It's a component<p className=\\"repo-header__logo\\">wow</p>
-            <div className=\\"m-2 repo-header d-flex m-1\\">Another one!</div>
-        </div>
-    )
+    /* nah */
+    &--wow {
+        color: blue;
+    }
+}
+
+/* Let's see how you handle global top-level classes! */
+:global(.theme-light) .kek {
+    color: red;
+}
+
+/* .repo-header { */
+.repoHeader {
+    flex: none;
+    padding: 0;
+    align-items: stretch;
+    border-color: var(--border-color);
+    border-style: solid;
+}
+
+.logo {
+    display: flex;
 }
 "
 `;

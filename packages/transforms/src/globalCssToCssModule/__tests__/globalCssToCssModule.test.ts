@@ -11,6 +11,7 @@ const TARGET_FILE_WITH_HYPHENS = path.resolve(__dirname, './fixtures/ComponentWi
 const TARGET_FILE_WITH_MIXED_NOTATION = path.resolve(__dirname, './fixtures/ComponentWithMixedNotation.tsx')
 const TARGET_FILE_WITH_NESTED_SELECTORS = path.resolve(__dirname, './fixtures/ComponentWithNestedSelectors.tsx')
 const TARGET_FILE_WITH_ACTUAL_NESTING = path.resolve(__dirname, './fixtures/ComponentWithActualNesting.tsx')
+const TARGET_FILE_WITH_PASCAL_CASE = path.resolve(__dirname, './fixtures/ComponentWithPascalCase.tsx')
 
 describe('globalCssToCssModule', () => {
   beforeEach(() => {
@@ -133,6 +134,34 @@ describe('globalCssToCssModule', () => {
       // Check that nested selectors are handled correctly
       // The issue: selected-list__item__selected should become selectedListItemSelected, not selected
       expect(reactComponent.source).toContain('styles.selectedListItemSelected')
+
+      expect(cssModule.source).toMatchSnapshot()
+      expect(reactComponent.source).toMatchSnapshot()
+    }
+  }, 15000)
+
+  it('handles PascalCase class names correctly', async () => {
+    const project = new Project()
+    project.addSourceFilesAtPaths(TARGET_FILE_WITH_PASCAL_CASE)
+    const [{ files }] = await globalCssToCssModule({ project, shouldFormat: true })
+
+    expect(files).toBeTruthy()
+
+    if (files) {
+      const [cssModule, reactComponent] = files
+
+      // Check that PascalCase class names are converted to camelCase
+      expect(reactComponent.source).toContain('styles.contactHeader')
+      expect(reactComponent.source).toContain('styles.title')
+      expect(reactComponent.source).toContain('styles.contactHeaderActive')
+      expect(reactComponent.source).toContain('styles.userProfile')
+      expect(reactComponent.source).toContain('styles.avatar')
+
+      // Check that CSS class names are converted to lowercase/camelCase
+      expect(cssModule.source).toContain('.contactHeader')
+      expect(cssModule.source).toContain('.userProfile')
+      expect(cssModule.source).not.toContain('.ContactHeader')
+      expect(cssModule.source).not.toContain('.UserProfile')
 
       expect(cssModule.source).toMatchSnapshot()
       expect(reactComponent.source).toMatchSnapshot()

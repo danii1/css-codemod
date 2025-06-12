@@ -81,12 +81,12 @@ export function postcssToCssModulePlugin(options: PostcssToCssModulePluginOption
         return
       }
 
-      // Transform underscore-separated and hyphen-separated class names to camelCase
+      // Transform underscore-separated, hyphen-separated, and PascalCase class names to camelCase
       // But skip class names that are inside :global() selectors
       if (!parentRule.selector.includes(':global(')) {
         parentRule.selector = parentRule.selector.replace(/\.([A-Z_a-z][\w-]*)/g, (match, className) => {
-          // Transform if the class name contains underscores or hyphens
-          if (className.includes('_') || className.includes('-')) {
+          // Transform if the class name contains underscores, hyphens, or starts with uppercase (PascalCase)
+          if (className.includes('_') || className.includes('-') || /^[A-Z]/.test(className)) {
             return '.' + convertToCamelCase(className)
           }
           return match

@@ -44,10 +44,17 @@ function getUsageStats(tsSourceFile: SourceFile, exportNameMap: Record<string, s
   const nodesWithClassName = getNodesWithClassName(tsSourceFile)
 
   for (const nodeWithClassName of nodesWithClassName) {
-    const classNameStringValue =
-      nodeWithClassName.getKind() === SyntaxKind.StringLiteral
-        ? (nodeWithClassName as any).getLiteralText()
-        : nodeWithClassName.getText()
+    let classNameStringValue: string
+
+    if (nodeWithClassName.getKind() === SyntaxKind.StringLiteral) {
+      classNameStringValue = (nodeWithClassName as any).getLiteralText()
+    } else if (nodeWithClassName.getKind() === SyntaxKind.NoSubstitutionTemplateLiteral) {
+      // For template literals without substitutions, get the raw text content
+      classNameStringValue = (nodeWithClassName as any).compilerNode.rawText || ''
+    } else {
+      // For other types (identifiers, template expressions with substitutions)
+      classNameStringValue = nodeWithClassName.getText()
+    }
 
     // Split class names and mark used ones
     const classNames = classNameStringValue.split(' ')
@@ -62,7 +69,7 @@ function getUsageStats(tsSourceFile: SourceFile, exportNameMap: Record<string, s
 }
 
 export function transformComponentFile(options: TransformComponentFileOptions): boolean {
-  const { tsSourceFile, exportNameMap, cssModuleFileName } = options
+  const { tsSourceFile, exportNameMap } = options
 
   // Skip transformation entirely if the component uses dynamic class names
   if (hasDynamicClassNames(tsSourceFile)) {
