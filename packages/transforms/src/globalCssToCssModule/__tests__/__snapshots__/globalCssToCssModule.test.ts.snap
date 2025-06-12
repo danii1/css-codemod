@@ -93,6 +93,29 @@ export const ComponentWithMixedNotation = () => {
 "
 `;
 
+exports[`globalCssToCssModule handles nested selectors with multiple underscores correctly 1`] = `
+".selectedListItemSelected {
+    background-color: #007bff;
+    color: white;
+    font-weight: bold;
+} "
+`;
+
+exports[`globalCssToCssModule handles nested selectors with multiple underscores correctly 2`] = `
+"// @ts-nocheck
+import React from 'react'
+import styles from './ComponentWithNestedSelectors.module.css'
+
+export const ComponentWithNestedSelectors = () => {
+    return (
+        <div>
+            <div className={styles.selectedListItemSelected}>Selected Item</div>
+        </div>
+    )
+}
+"
+`;
+
 exports[`globalCssToCssModule handles underscore-separated class names correctly 1`] = `
 ".trackTooltipKeyTagsItem {
     display: flex;

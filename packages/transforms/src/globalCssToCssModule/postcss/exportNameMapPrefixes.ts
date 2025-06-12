@@ -1,16 +1,16 @@
 import camelcase from 'camelcase'
 
-import { decapitalize, isDefined } from '@sourcegraph/codemod-common'
+import { decapitalize } from '@sourcegraph/codemod-common'
 
 interface RemovedPrefix {
-    prefix: string
-    exportName: string
+  prefix: string
+  exportName: string
 }
 
 interface RemovePrefixFromExportNameIfNeededOptions {
-    className: string
-    exportName: string
-    prefixesToRemove: RemovedPrefix[]
+  className: string
+  exportName: string
+  prefixesToRemove: RemovedPrefix[]
 }
 
 /**
@@ -27,17 +27,17 @@ interface RemovePrefixFromExportNameIfNeededOptions {
  * ```
  */
 export function removePrefixFromExportNameIfNeeded(options: RemovePrefixFromExportNameIfNeededOptions): string {
-    const { className, exportName, prefixesToRemove } = options
+  const { className, exportName, prefixesToRemove } = options
 
-    const removedPrefix = prefixesToRemove.find(removedPrefix => {
-        return exportName.startsWith(removedPrefix.exportName) && className.startsWith(removedPrefix.prefix)
-    })
+  const removedPrefix = prefixesToRemove.find(removedPrefix => {
+    return exportName.startsWith(removedPrefix.exportName) && className.startsWith(removedPrefix.prefix)
+  })
 
-    if (removedPrefix) {
-        return decapitalize(exportName.replace(removedPrefix.exportName, ''))
-    }
+  if (removedPrefix) {
+    return decapitalize(exportName.replace(removedPrefix.exportName, ''))
+  }
 
-    return exportName
+  return exportName
 }
 
 /**
@@ -55,22 +55,30 @@ export function removePrefixFromExportNameIfNeeded(options: RemovePrefixFromExpo
  * Here `menu__` is a removed prefix because className changed:
  * .menu__button -> .button
  *
+ * However, we should only remove prefixes when we have evidence of actual nesting.
+ * A standalone class like `.selected-list__item__selected` should NOT have its prefix removed.
  */
 export function getPrefixesToRemove(exportNameMap: Record<string, string>): RemovedPrefix[] {
-    const prefixesToRemove = Object.keys(exportNameMap)
-        .map(key => {
-            const matches = key.match(/(.+)__/)
+  const classNames = Object.keys(exportNameMap)
+  const prefixesToRemove: RemovedPrefix[] = []
 
-            if (matches) {
-                return {
-                    prefix: matches[0],
-                    exportName: camelcase(matches[1]),
-                }
-            }
+  // Only create prefix removal rules when we have evidence of actual nesting
+  // i.e., when we have both the parent class and the nested class
+  for (const className of classNames) {
+    const matches = className.match(/(.+)__/)
+    if (matches) {
+      const potentialParentClass = matches[1]
 
-            return undefined
+      // Only remove prefix if the parent class also exists in the export map
+      // This indicates actual nesting, not just a standalone class with multiple underscores
+      if (exportNameMap[potentialParentClass]) {
+        prefixesToRemove.push({
+          prefix: matches[0],
+          exportName: camelcase(potentialParentClass),
         })
-        .filter(isDefined)
+      }
+    }
+  }
 
-    return [...new Set(prefixesToRemove)]
+  return [...new Set(prefixesToRemove)]
 }

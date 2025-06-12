@@ -1,6 +1,5 @@
 import path from 'path'
 
-import signale from 'signale'
 import { Project } from 'ts-morph'
 
 import { globalCssToCssModule } from '../globalCssToCssModule'
@@ -10,10 +9,12 @@ const TARGET_FILE_WITH_CSS_IMPORT = path.resolve(__dirname, './fixtures/Componen
 const TARGET_FILE_WITH_UNDERSCORES = path.resolve(__dirname, './fixtures/ComponentWithUnderscores.tsx')
 const TARGET_FILE_WITH_HYPHENS = path.resolve(__dirname, './fixtures/ComponentWithHyphens.tsx')
 const TARGET_FILE_WITH_MIXED_NOTATION = path.resolve(__dirname, './fixtures/ComponentWithMixedNotation.tsx')
+const TARGET_FILE_WITH_NESTED_SELECTORS = path.resolve(__dirname, './fixtures/ComponentWithNestedSelectors.tsx')
+const TARGET_FILE_WITH_ACTUAL_NESTING = path.resolve(__dirname, './fixtures/ComponentWithActualNesting.tsx')
 
 describe('globalCssToCssModule', () => {
   beforeEach(() => {
-    signale.disable()
+    // signale.disable()
   })
 
   it('transforms correctly', async () => {
@@ -118,4 +119,24 @@ describe('globalCssToCssModule', () => {
       expect(reactComponent.source).toMatchSnapshot()
     }
   }, 15000)
+
+  it('handles nested selectors with multiple underscores correctly', async () => {
+    const project = new Project()
+    project.addSourceFilesAtPaths(TARGET_FILE_WITH_NESTED_SELECTORS)
+    const [{ files }] = await globalCssToCssModule({ project, shouldFormat: true })
+
+    expect(files).toBeTruthy()
+
+    if (files) {
+      const [cssModule, reactComponent] = files
+
+      // Check that nested selectors are handled correctly
+      // The issue: selected-list__item__selected should become selectedListItemSelected, not selected
+      expect(reactComponent.source).toContain('styles.selectedListItemSelected')
+
+      expect(cssModule.source).toMatchSnapshot()
+      expect(reactComponent.source).toMatchSnapshot()
+    }
+  }, 15000)
+
 })

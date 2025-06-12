@@ -1,0 +1,5 @@
+.selected-list__item__selected {
+    background-color: #007bff;
+    color: white;
+    font-weight: bold;
+} 
