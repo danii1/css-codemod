@@ -8,6 +8,8 @@ import { globalCssToCssModule } from '../globalCssToCssModule'
 const TARGET_FILE = path.resolve(__dirname, './fixtures/MyComponent.tsx')
 const TARGET_FILE_WITH_CSS_IMPORT = path.resolve(__dirname, './fixtures/ComponentWithCssImport.tsx')
 const TARGET_FILE_WITH_UNDERSCORES = path.resolve(__dirname, './fixtures/ComponentWithUnderscores.tsx')
+const TARGET_FILE_WITH_HYPHENS = path.resolve(__dirname, './fixtures/ComponentWithHyphens.tsx')
+const TARGET_FILE_WITH_MIXED_NOTATION = path.resolve(__dirname, './fixtures/ComponentWithMixedNotation.tsx')
 
 describe('globalCssToCssModule', () => {
   beforeEach(() => {
@@ -69,6 +71,48 @@ describe('globalCssToCssModule', () => {
       expect(reactComponent.source).toContain('styles.trackTooltipKeyTagsItem')
       expect(reactComponent.source).toContain('styles.componentSectionTitle')
       expect(reactComponent.source).toContain('styles.buttonPrimaryLarge')
+
+      expect(cssModule.source).toMatchSnapshot()
+      expect(reactComponent.source).toMatchSnapshot()
+    }
+  }, 15000)
+
+  it('handles hyphen-separated class names correctly', async () => {
+    const project = new Project()
+    project.addSourceFilesAtPaths(TARGET_FILE_WITH_HYPHENS)
+    const [{ files }] = await globalCssToCssModule({ project, shouldFormat: true })
+
+    expect(files).toBeTruthy()
+
+    if (files) {
+      const [cssModule, reactComponent] = files
+
+      // Check that hyphen-separated class names are converted to camelCase
+      expect(reactComponent.source).toContain('styles.playlistStatsUser')
+      expect(reactComponent.source).toContain('styles.playlistStatsUserAvatar')
+      expect(reactComponent.source).toContain('styles.componentSectionTitle')
+      expect(reactComponent.source).toContain('styles.buttonPrimaryLarge')
+
+      expect(cssModule.source).toMatchSnapshot()
+      expect(reactComponent.source).toMatchSnapshot()
+    }
+  }, 15000)
+
+  it('handles mixed hyphen and underscore notation correctly', async () => {
+    const project = new Project()
+    project.addSourceFilesAtPaths(TARGET_FILE_WITH_MIXED_NOTATION)
+    const [{ files }] = await globalCssToCssModule({ project, shouldFormat: true })
+
+    expect(files).toBeTruthy()
+
+    if (files) {
+      const [cssModule, reactComponent] = files
+
+      // Check that mixed notation class names are converted to camelCase
+      expect(reactComponent.source).toContain('styles.componentSectionTitle')
+      expect(reactComponent.source).toContain('styles.playlistStatsUserAvatar')
+      expect(reactComponent.source).toContain('styles.buttonPrimaryLarge')
+      expect(reactComponent.source).toContain('styles.menuItemContainerActive')
 
       expect(cssModule.source).toMatchSnapshot()
       expect(reactComponent.source).toMatchSnapshot()

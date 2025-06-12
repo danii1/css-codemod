@@ -19,10 +19,11 @@ const removeCssNestingProcessor = createCssProcessor(postcssNested)
 const transformToCssModuleProcessor = createCssProcessor(postcssNested, postcssToCssModulePlugin())
 
 /**
- * Convert underscore-separated class names to camelCase
+ * Convert underscore-separated and hyphen-separated class names to camelCase
  * TrackTooltip_KeyTags_Item -> trackTooltipKeyTagsItem
+ * PlaylistStats-user-avatar -> playlistStatsUserAvatar
  */
-function convertUnderscoresToCamelCase(className: string): string {
+function convertToCamelCase(className: string): string {
   return camelcase(className)
 }
 
@@ -34,15 +35,27 @@ export async function getCssModuleExportNameMap(sourceCss: string): Promise<Reco
   const transformedResult = await transformToCssModuleProcessor(sourceCss)
   const classNames = await sourceCssToClassNames(transformedResult.css)
 
-  // Create a reverse mapping from camelCase back to original underscore names
+  // Create a reverse mapping from camelCase back to original underscore/hyphen names
   const camelCaseToOriginalMap = new Map<string, string>()
 
-  // Extract original class names from source CSS
-  const originalClassMatches = sourceCss.match(/\.([A-Z_a-z]\w*)/g) || []
+  // Extract original class names from source CSS, but skip those inside :global() selectors
+  const originalClassMatches = sourceCss.match(/\.([A-Z_a-z][\w-]*)/g) || []
   for (const match of originalClassMatches) {
     const originalClassName = match.slice(1) // Remove the dot
-    if (originalClassName.includes('_')) {
-      const camelCaseClassName = convertUnderscoresToCamelCase(originalClassName)
+
+    // Skip class names that are inside :global() selectors
+    const matchIndex = sourceCss.indexOf(match)
+    const beforeMatch = sourceCss.slice(0, Math.max(0, matchIndex))
+    const lastGlobalStart = beforeMatch.lastIndexOf(':global(')
+    const lastGlobalEnd = beforeMatch.lastIndexOf(')')
+
+    // If we're inside a :global() selector, skip this class name
+    if (lastGlobalStart > lastGlobalEnd) {
+      continue
+    }
+
+    if (originalClassName.includes('_') || originalClassName.includes('-')) {
+      const camelCaseClassName = convertToCamelCase(originalClassName)
       camelCaseToOriginalMap.set(camelCaseClassName, originalClassName)
     }
   }

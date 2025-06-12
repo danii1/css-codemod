@@ -1,0 +1,27 @@
+.Component-Section_Title {
+    font-size: 18px;
+    font-weight: bold;
+    color: #333;
+}
+
+.PlaylistStats-user_avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-color: #007bff;
+}
+
+.Button_Primary-Large {
+    padding: 12px 24px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+}
+
+.Menu-Item_Container-Active {
+    display: flex;
+    align-items: center;
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+} 

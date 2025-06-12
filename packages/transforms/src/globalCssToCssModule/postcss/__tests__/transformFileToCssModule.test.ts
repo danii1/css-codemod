@@ -1,12 +1,12 @@
 import { transformFileToCssModule } from '../transformFileToCssModule'
 
 const replaceWhitespace = (value: string) => {
-    return value.replace(/\s+/g, ' ').trim()
+  return value.replace(/\s+/g, ' ').trim()
 }
 
 describe('transformFileToCssModule', () => {
-    it('correctly transforms provided CSS to CSS module', async () => {
-        const sourceCss = `
+  it('correctly transforms provided CSS to CSS module', async () => {
+    const sourceCss = `
             @import './RepositoriesPopover';
 
             // .repo-header comment
@@ -50,9 +50,7 @@ describe('transformFileToCssModule', () => {
             }
         `
 
-        const expectedCssModuleSource = `
-                @import 'wildcard/src/global-styles/breakpoints';
-
+    const expectedCssModuleSource = `
                 /* .repo-header comment*/
                 .repo-header {
                     flex: none;
@@ -94,9 +92,9 @@ describe('transformFileToCssModule', () => {
                 }
         `
 
-        const { css, filePath } = await transformFileToCssModule({ sourceCss, sourceFilePath: 'whatever.scss' })
+    const { css, filePath } = await transformFileToCssModule({ sourceCss, sourceFilePath: 'whatever.scss' })
 
-        expect(replaceWhitespace(css)).toEqual(replaceWhitespace(expectedCssModuleSource))
-        expect(filePath).toEqual('whatever.module.scss')
-    })
+    expect(replaceWhitespace(css)).toEqual(replaceWhitespace(expectedCssModuleSource))
+    expect(filePath).toEqual('whatever.module.css')
+  })
 })

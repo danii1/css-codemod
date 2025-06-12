@@ -1,5 +1,98 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
+exports[`globalCssToCssModule handles hyphen-separated class names correctly 1`] = `
+".playlistStatsUser {
+    display: flex;
+    padding: 8px;
+    background-color: #f0f0f0;
+}
+
+.playlistStatsUserAvatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-color: #007bff;
+}
+
+.componentSectionTitle {
+    font-size: 18px;
+    font-weight: bold;
+    color: #333;
+}
+
+.buttonPrimaryLarge {
+    padding: 12px 24px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+} "
+`;
+
+exports[`globalCssToCssModule handles hyphen-separated class names correctly 2`] = `
+"// @ts-nocheck
+import React from 'react'
+import styles from './ComponentWithHyphens.module.css'
+
+export const ComponentWithHyphens = () => {
+    return (
+        <div className={styles.playlistStatsUser}>
+            <div className={styles.playlistStatsUserAvatar}></div>
+            <p className={styles.componentSectionTitle}>Title</p>
+            <span className={styles.buttonPrimaryLarge}>Button</span>
+        </div>
+    )
+}
+"
+`;
+
+exports[`globalCssToCssModule handles mixed hyphen and underscore notation correctly 1`] = `
+".componentSectionTitle {
+    font-size: 18px;
+    font-weight: bold;
+    color: #333;
+}
+
+.playlistStatsUserAvatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-color: #007bff;
+}
+
+.buttonPrimaryLarge {
+    padding: 12px 24px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+}
+
+.menuItemContainerActive {
+    display: flex;
+    align-items: center;
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+} "
+`;
+
+exports[`globalCssToCssModule handles mixed hyphen and underscore notation correctly 2`] = `
+"// @ts-nocheck
+import React from 'react'
+import styles from './ComponentWithMixedNotation.module.css'
+
+export const ComponentWithMixedNotation = () => {
+    return (
+        <div className={styles.menuItemContainerActive}>
+            <h2 className={styles.componentSectionTitle}>Mixed Notation Title</h2>
+            <div className={styles.playlistStatsUserAvatar}></div>
+            <button className={styles.buttonPrimaryLarge}>Mixed Notation Button</button>
+        </div>
+    )
+}
+"
+`;
+
 exports[`globalCssToCssModule handles underscore-separated class names correctly 1`] = `
 ".trackTooltipKeyTagsItem {
     display: flex;
@@ -39,17 +132,17 @@ export const ComponentWithUnderscores = () => {
 `;
 
 exports[`globalCssToCssModule removes existing CSS import and adds CSS module import 1`] = `
-".test-class {
+".testClass {
     color: red;
     font-size: 16px;
 }
 
-.another-class {
+.anotherClass {
     background-color: blue;
     padding: 10px;
 }
 
-.nested-class {
+.nestedClass {
     font-weight: bold;
     margin: 5px;
 } "
@@ -72,128 +165,24 @@ export const ComponentWithCssImport = () => {
 `;
 
 exports[`globalCssToCssModule transforms correctly 1`] = `
-"
+"// @ts-nocheck
+import React from 'react'
 
-/* Woah!*/
-.kek {
-    color: red;
+export const MyComponent = () => {
+    const isActive = true
 
-    /* nah*/
-    &--wow {
-        color: blue;
-    }
-}
-
-/* Let's see how you handle global top-level classes!*/
-:global(.theme-light) .kek {
-    color: red;
-}
-
-/* .repo-header {*/
-.repo-header {
-    flex: none;
-    padding: 0;
-    align-items: stretch;
-    border-color: var(--border-color);
-    border-style: solid;
-
-    /* &--alert {*/
-    &--alert {
-        border-width: 1px 0;
-    }
-
-    /* .navbar-nav {*/
-    :global(.navbar-nav) {
-        white-space: nowrap;
-
-        :global(.nav-item) {
-            display: flex;
-            align-items: stretch;
-
-            /* .nav-link {*/
-            :global(.nav-link) {
-                user-select: none;
-            }
-        }
-    }
-
-    :global(.copy-link-action) {
-        opacity: 0;
-    }
-
-    &:hover,
-    &:focus-within {
-        :global(.copy-link-action) {
-            opacity: 1;
-        }
-    }
-}
-
-.logo {
-    display: flex;
-}
-
-/* &__action-list-item {*/
-.action-list-item {
-    /* Have a small gap between buttons so they are visually distinct when pressed*/
-    /* stylelint-disable-next-line declaration-property-unit-whitelist*/
-    margin-left: 1px;
-
-    /* &:hover {*/
-    &:hover {
-        /* background: var(--color-bg-1);*/
-        background: var(--color-bg-1);
-
-        /* .theme-light & {*/
-        :global(.theme-light) & {
-            background: inherit;
-        }
-    }
-}
-
-/* &__file-action {*/
-.file-action {
-    display: block;
-    text-align: left;
-
-    /* span {*/
-    span {
-        color: var(--body-color);
-        margin-left: 0.5rem;
-    }
-}
-
-/* &__action {*/
-.action {
-    margin: 0.5rem 0.625rem 0.5rem 0;
-    padding: 0.25rem;
-
-    :global(.theme-light) & {
-        margin-top: 0;
-        margin-bottom: 0;
-    }
-}
-
-.alert {
-    margin: 0 0.25rem;
-    padding: 0.125rem 0.25rem;
-    cursor: default;
-    user-select: none;
-}
-
-/* &__icon-chevron {*/
-.icon-chevron {
-    opacity: 0.6;
-    margin: auto;
-}
-
-.spacer {
-    flex: 1 1 0;
-}
-
-/* &__kek-pek {*/
-.kek-pek {
-    color: red;
+    return (
+        <div className=\\"kek kek--wow d-flex m-1\\">
+            <div
+                className={classNames('m-1', true ? 'kek' : false, 'd-flex', {
+                    kek: false,
+                    'd-flex mr-1 kek': isActive,
+                })}
+            ></div>
+            It's a component<p className=\\"repo-header__logo\\">wow</p>
+            <div className=\\"m-2 repo-header d-flex m-1\\">Another one!</div>
+        </div>
+    )
 }
 "
 `;

@@ -9,10 +9,11 @@ interface PostcssToCssModulePluginOptions {
 }
 
 /**
- * Convert underscore-separated class names to camelCase
+ * Convert underscore-separated and hyphen-separated class names to camelCase
  * TrackTooltip_KeyTags_Item -> trackTooltipKeyTagsItem
+ * PlaylistStats-user-avatar -> playlistStatsUserAvatar
  */
-function convertUnderscoresToCamelCase(className: string): string {
+function convertToCamelCase(className: string): string {
   return camelcase(className)
 }
 
@@ -80,14 +81,17 @@ export function postcssToCssModulePlugin(options: PostcssToCssModulePluginOption
         return
       }
 
-      // Transform underscore-separated class names to camelCase
-      parentRule.selector = parentRule.selector.replace(/\.([A-Z_a-z]\w*)/g, (match, className) => {
-        // Only transform if the class name contains underscores
-        if (className.includes('_')) {
-          return '.' + convertUnderscoresToCamelCase(className)
-        }
-        return match
-      })
+      // Transform underscore-separated and hyphen-separated class names to camelCase
+      // But skip class names that are inside :global() selectors
+      if (!parentRule.selector.includes(':global(')) {
+        parentRule.selector = parentRule.selector.replace(/\.([A-Z_a-z][\w-]*)/g, (match, className) => {
+          // Transform if the class name contains underscores or hyphens
+          if (className.includes('_') || className.includes('-')) {
+            return '.' + convertToCamelCase(className)
+          }
+          return match
+        })
+      }
 
       // Go through all child selectors and remove redundant nesting according to our guidelines:
       // https://docs.sourcegraph.com/dev/background-information/web/styling#css-modules
