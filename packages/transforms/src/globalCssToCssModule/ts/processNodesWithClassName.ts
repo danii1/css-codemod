@@ -1,14 +1,15 @@
-import { ts, Identifier, StringLiteral } from 'ts-morph'
+import { ts, Identifier, StringLiteral, TemplateExpression, NoSubstitutionTemplateLiteral } from 'ts-morph'
 
 import { getClassNameNodeReplacement } from './getClassNameNodeReplacement'
+import { getTemplateExpressionWithCssModules } from './getTemplateExpressionWithCssModules'
 import { splitClassName } from './splitClassName'
 
 export const STYLES_IDENTIFIER = 'styles'
 
 interface ProcessNodesWithClassNameOptions {
-    nodesWithClassName: (Identifier | StringLiteral)[]
-    exportNameMap: Record<string, string>
-    usageStats: Record<string, boolean>
+  nodesWithClassName: (Identifier | StringLiteral | TemplateExpression | NoSubstitutionTemplateLiteral)[]
+  exportNameMap: Record<string, string>
+  usageStats: Record<string, boolean>
 }
 
 /**
@@ -41,43 +42,57 @@ interface ProcessNodesWithClassNameOptions {
  * @returns areAllNodesProcessed: boolean
  */
 export function processNodesWithClassName(options: ProcessNodesWithClassNameOptions): boolean {
-    const { nodesWithClassName, exportNameMap, usageStats } = options
+  const { nodesWithClassName, exportNameMap, usageStats } = options
 
-    for (const nodeWithClassName of nodesWithClassName) {
-        const classNameStringValue =
-            nodeWithClassName instanceof StringLiteral
-                ? nodeWithClassName.getLiteralText()
-                : nodeWithClassName.getText()
+  for (const nodeWithClassName of nodesWithClassName) {
+    // Handle template expressions and no-substitution template literals
+    if (nodeWithClassName instanceof TemplateExpression || nodeWithClassName instanceof NoSubstitutionTemplateLiteral) {
+      const replacement = getTemplateExpressionWithCssModules({
+        templateExpression: nodeWithClassName as TemplateExpression,
+        exportNameMap,
+        usageStats,
+      })
 
-        const { exportNames, leftOverClassnames } = splitClassName({
-            className: classNameStringValue,
-            exportNameMap,
-            usageStats,
-        })
-
-        // There's nothing to update in this `className` node.
-        if (exportNames.length === 0) {
-            continue
-        }
-
-        const exportNameReferences = exportNames.map(exportName => {
-            return ts.factory.createPropertyAccessExpression(ts.factory.createIdentifier(STYLES_IDENTIFIER), exportName)
-        })
-
-        const result = getClassNameNodeReplacement({
-            parentNode: nodeWithClassName.getParent(),
-            leftOverClassName: leftOverClassnames.join(' '),
-            exportNameReferences,
-        })
-
-        if (result.isParentTransformed) {
-            return false
-        }
-
-        nodeWithClassName.transform(() => {
-            return result.replacement
-        })
+      if (replacement) {
+        nodeWithClassName.transform(() => { return replacement })
+      }
+      continue
     }
 
-    return true
+    const classNameStringValue =
+      nodeWithClassName instanceof StringLiteral
+        ? nodeWithClassName.getLiteralText()
+        : nodeWithClassName.getText()
+
+    const { exportNames, leftOverClassnames } = splitClassName({
+      className: classNameStringValue,
+      exportNameMap,
+      usageStats,
+    })
+
+    // There's nothing to update in this `className` node.
+    if (exportNames.length === 0) {
+      continue
+    }
+
+    const exportNameReferences = exportNames.map(exportName => {
+      return ts.factory.createPropertyAccessExpression(ts.factory.createIdentifier(STYLES_IDENTIFIER), exportName)
+    })
+
+    const result = getClassNameNodeReplacement({
+      parentNode: nodeWithClassName.getParent(),
+      leftOverClassName: leftOverClassnames.join(' '),
+      exportNameReferences,
+    })
+
+    if (result.isParentTransformed) {
+      return false
+    }
+
+    nodeWithClassName.transform(() => {
+      return result.replacement
+    })
+  }
+
+  return true
 }
