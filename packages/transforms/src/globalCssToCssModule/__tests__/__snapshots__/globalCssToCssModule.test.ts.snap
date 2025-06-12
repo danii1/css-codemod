@@ -1,5 +1,76 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
+exports[`globalCssToCssModule handles underscore-separated class names correctly 1`] = `
+".trackTooltipKeyTagsItem {
+    display: flex;
+    padding: 8px;
+    background-color: #f0f0f0;
+}
+
+.componentSectionTitle {
+    font-size: 18px;
+    font-weight: bold;
+    color: #333;
+}
+
+.buttonPrimaryLarge {
+    padding: 12px 24px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+} "
+`;
+
+exports[`globalCssToCssModule handles underscore-separated class names correctly 2`] = `
+"// @ts-nocheck
+import React from 'react'
+import styles from './ComponentWithUnderscores.module.css'
+
+export const ComponentWithUnderscores = () => {
+    return (
+        <div className={styles.trackTooltipKeyTagsItem}>
+            <p className={styles.componentSectionTitle}>Title</p>
+            <span className={styles.buttonPrimaryLarge}>Button</span>
+        </div>
+    )
+}
+"
+`;
+
+exports[`globalCssToCssModule removes existing CSS import and adds CSS module import 1`] = `
+".test-class {
+    color: red;
+    font-size: 16px;
+}
+
+.another-class {
+    background-color: blue;
+    padding: 10px;
+}
+
+.nested-class {
+    font-weight: bold;
+    margin: 5px;
+} "
+`;
+
+exports[`globalCssToCssModule removes existing CSS import and adds CSS module import 2`] = `
+"// @ts-nocheck
+import React from 'react'
+import classNames from 'classnames'
+import styles from './ComponentWithCssImport.module.css'
+
+export const ComponentWithCssImport = () => {
+    return (
+        <div className={classNames(styles.testClass, styles.anotherClass)}>
+            <p className={styles.nestedClass}>Content with CSS classes</p>
+        </div>
+    )
+}
+"
+`;
+
 exports[`globalCssToCssModule transforms correctly 1`] = `
 "
 
@@ -131,7 +202,7 @@ exports[`globalCssToCssModule transforms correctly 2`] = `
 "// @ts-nocheck
 import React from 'react'
 import classNames from 'classnames'
-import styles from './MyComponent.module.scss'
+import styles from './MyComponent.module.css'
 
 export const MyComponent = () => {
     const isActive = true

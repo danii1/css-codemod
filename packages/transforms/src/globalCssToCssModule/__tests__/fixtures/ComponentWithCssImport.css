@@ -1,0 +1,14 @@
+.test-class {
+    color: red;
+    font-size: 16px;
+}
+
+.another-class {
+    background-color: blue;
+    padding: 10px;
+}
+
+.nested-class {
+    font-weight: bold;
+    margin: 5px;
+} 

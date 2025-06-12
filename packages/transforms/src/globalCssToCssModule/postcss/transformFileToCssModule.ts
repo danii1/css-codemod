@@ -5,28 +5,28 @@ import { postcssToCssModulePlugin } from './postcssToCssModulePlugin'
 import { updateImportsPlugin } from './updateImportsPlugin'
 
 interface TransformFileToCssModuleOptions {
-    sourceCss: string
-    sourceFilePath: string
+  sourceCss: string
+  sourceFilePath: string
 }
 
 interface TransformFileToCssModuleResult {
-    css: string
-    filePath: string
+  css: string
+  filePath: string
 }
 
 export async function transformFileToCssModule(
-    options: TransformFileToCssModuleOptions
+  options: TransformFileToCssModuleOptions
 ): Promise<TransformFileToCssModuleResult> {
-    const { sourceCss, sourceFilePath } = options
+  const { sourceCss, sourceFilePath } = options
 
-    const transformFileToCssModuleProcessor = createCssProcessor(updateImportsPlugin(), postcssToCssModulePlugin())
-    const transformedResult = await transformFileToCssModuleProcessor(sourceCss)
+  const transformFileToCssModuleProcessor = createCssProcessor(updateImportsPlugin(), postcssToCssModulePlugin())
+  const transformedResult = await transformFileToCssModuleProcessor(sourceCss)
 
-    const { dir, name } = path.parse(sourceFilePath)
-    const newFilePath = path.join(dir, `${name}.module.scss`)
+  const { dir, name } = path.parse(sourceFilePath)
+  const newFilePath = path.join(dir, `${name}.module.css`)
 
-    return {
-        css: transformedResult.css,
-        filePath: newFilePath,
-    }
+  return {
+    css: transformedResult.css,
+    filePath: newFilePath,
+  }
 }
