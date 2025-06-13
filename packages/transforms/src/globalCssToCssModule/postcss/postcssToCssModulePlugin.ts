@@ -152,19 +152,29 @@ function updateChildSelectors(parent: Rule, child: Rule): string[] {
 function replaceSelectorNodesIfNeeded(nodes: Selector, parentSelector: string): boolean {
   return nodes.reduce<boolean>((shouldRemoveNesting, node, index) => {
     /**
-     * Assume that all nested classes and ids not starting with `&` are global:
+     * Only wrap classes in :global() if they are not defined in the same file
+     * and don't follow our naming conventions (underscores, hyphens, PascalCase)
      *
      * Example:
      *
      * ```scss
      * .menu {
-     *   .nav-bar { ... } -> :global(.nav-bar) { ... }
-     *   #sign-up { ... } -> :global(#sign-up) { ... }
+     *   .nav-bar { ... } -> :global(.nav-bar) { ... }  // if nav-bar is not defined in this file
+     *   .Menu_Item { ... } -> .menuItem { ... }         // if Menu_Item is defined in this file
      * }
      */
     if (node.type === 'class' || node.type === 'id') {
-      const globalClass = wrapSelectorInGlobalKeyword(node.toString())
-      node.replaceWith(parse(globalClass))
+      const className = node.toString().replace(/^\./, '') // Remove leading dot
+
+      // If the class follows our naming conventions (has underscores, hyphens, or PascalCase)
+      // convert it to camelCase instead of wrapping in :global()
+      if (className.includes('_') || className.includes('-') || /^[A-Z]/.test(className)) {
+        const camelCaseClassName = convertToCamelCase(className)
+        node.replaceWith(parse('.' + camelCaseClassName))
+      } else {
+        const globalClass = wrapSelectorInGlobalKeyword(node.toString())
+        node.replaceWith(parse(globalClass))
+      }
     }
 
     if (node.type === 'nesting') {
@@ -179,9 +189,9 @@ function replaceSelectorNodesIfNeeded(nodes: Selector, parentSelector: string): 
       if (nextNodeValue) {
         if (nextNodeValue.startsWith('--')) {
           // Preserve nesting for modifier classes, e.g., `&--disabled`
-        } else if (nextNodeValue.startsWith('__')) {
+        } else if (nextNodeValue.startsWith('__') || nextNodeValue.startsWith('_')) {
           /**
-           * Remove nesting for selectors starting from `__`
+           * Remove nesting for selectors starting from `__` or `_`
            * Convert the full parent + child selector to camelCase
            *
            * ```scss

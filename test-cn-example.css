@@ -1,0 +1,15 @@
+.Form_Input {
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.SizePicker__input--error {
+    border-color: red;
+    background-color: #ffe6e6;
+}
+
+.Form_Field {
+    width: 100%;
+    font-size: 14px;
+}

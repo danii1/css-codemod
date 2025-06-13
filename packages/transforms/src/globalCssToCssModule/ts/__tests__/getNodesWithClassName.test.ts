@@ -79,6 +79,39 @@ describe('getNodesWithClassName', () => {
       resultLength: 0,
       firstNode: null,
     },
+    {
+      fileSource: 'const heightClassName = cn("Form_Input", { "SizePicker__input--error": value.height < minHeight })',
+      targetKind: 'StringLiteral and Identifier',
+      resultLength: 2,
+      firstNode: {
+        kind: SyntaxKind.StringLiteral,
+        parentKind: SyntaxKind.CallExpression,
+      },
+    },
+    {
+      fileSource: 'const styles = classNames("btn", "btn-primary")',
+      targetKind: 'StringLiteral',
+      resultLength: 2,
+      firstNode: {
+        kind: SyntaxKind.StringLiteral,
+        parentKind: SyntaxKind.CallExpression,
+      },
+    },
+    {
+      fileSource: 'const classes = clsx("container", { active: isActive })',
+      targetKind: 'StringLiteral and Identifier',
+      resultLength: 2,
+      firstNode: {
+        kind: SyntaxKind.StringLiteral,
+        parentKind: SyntaxKind.CallExpression,
+      },
+    },
+    {
+      fileSource: 'const other = someFunction("not-a-class")',
+      targetKind: 'none',
+      resultLength: 0,
+      firstNode: null,
+    },
   ]
 
   it.each(testCases)('finds nodes with class name of $targetKind kind', ({ fileSource, resultLength, firstNode }) => {
