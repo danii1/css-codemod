@@ -11,6 +11,7 @@ interface TransformComponentFileOptions {
   tsSourceFile: SourceFile
   exportNameMap: Record<string, string>
   cssModuleFileName: string
+  globalClassNames?: Set<string>
 }
 
 /**
@@ -73,7 +74,11 @@ function getUsageStats(tsSourceFile: SourceFile, exportNameMap: Record<string, s
  * Check if the transformation would result in global class names remaining in the TSX file.
  * This function simulates the transformation process without modifying the source file.
  */
-function hasGlobalClassNamesAfterTransformation(tsSourceFile: SourceFile, exportNameMap: Record<string, string>): { hasGlobalClasses: boolean; globalClasses: string[] } {
+function hasGlobalClassNamesAfterTransformation(
+  tsSourceFile: SourceFile,
+  exportNameMap: Record<string, string>,
+  globalClassNames: Set<string> = new Set()
+): { hasGlobalClasses: boolean; globalClasses: string[] } {
   const nodesWithClassName = getNodesWithClassName(tsSourceFile)
   const globalClasses: string[] = []
 
@@ -98,10 +103,10 @@ function hasGlobalClassNamesAfterTransformation(tsSourceFile: SourceFile, export
       usageStats: {}, // We don't need to track usage for this check
     })
 
-    // Collect any leftover class names (global classes)
+    // Collect any leftover class names (global classes) that are NOT in the global CSS files
     for (const leftOverClass of leftOverClassnames) {
       const trimmedClass = leftOverClass.trim()
-      if (trimmedClass !== '' && !globalClasses.includes(trimmedClass)) {
+      if (trimmedClass !== '' && !globalClasses.includes(trimmedClass) && !globalClassNames.has(trimmedClass)) {
         globalClasses.push(trimmedClass)
       }
     }
@@ -114,7 +119,7 @@ function hasGlobalClassNamesAfterTransformation(tsSourceFile: SourceFile, export
 }
 
 export function transformComponentFile(options: TransformComponentFileOptions): boolean {
-  const { tsSourceFile, exportNameMap } = options
+  const { tsSourceFile, exportNameMap, globalClassNames = new Set() } = options
 
   // Skip transformation entirely if the component uses dynamic class names
   if (hasDynamicClassNames(tsSourceFile)) {
@@ -141,7 +146,7 @@ export function transformComponentFile(options: TransformComponentFileOptions): 
   }
 
   // Check if transformation would result in global class names remaining
-  const { hasGlobalClasses, globalClasses } = hasGlobalClassNamesAfterTransformation(tsSourceFile, exportNameMap)
+  const { hasGlobalClasses, globalClasses } = hasGlobalClassNamesAfterTransformation(tsSourceFile, exportNameMap, globalClassNames)
 
   if (hasGlobalClasses) {
     signale.warn(

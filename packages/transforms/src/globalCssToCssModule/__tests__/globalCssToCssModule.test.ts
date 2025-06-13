@@ -421,4 +421,123 @@ export const ComponentWithAllCssModuleClasses = () => {
     }
   }, 15000)
 
+  it('allows transformation when global classes are defined in provided global CSS files', async () => {
+    const project = new Project()
+
+    // Create a component that has BOTH CSS module classes AND global classes
+    const tsFile = project.createSourceFile('ComponentWithGlobalClasses.tsx', `
+import React from 'react'
+
+export const ComponentWithGlobalClasses = () => {
+    return (
+        <div className="my-component d-flex">
+            <p className="my-component__title text-primary">Title with mixed classes</p>
+            <button className="my-component__button btn btn-primary">Button with mixed classes</button>
+        </div>
+    )
+}
+`)
+
+    // Create CSS file that defines SOME of the classes (CSS module classes)
+    // while others remain global (d-flex, text-primary, btn, btn-primary)
+    const cssFile = project.createSourceFile('ComponentWithGlobalClasses.css', `
+.my-component {
+    display: block;
+    padding: 16px;
+}
+
+.my-component__title {
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.my-component__button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+}
+`)
+
+    // Create a global CSS file that defines the global classes
+    const globalCssFile = project.createSourceFile('global.css', `
+.d-flex {
+    display: flex;
+}
+
+.text-primary {
+    color: #007bff;
+}
+
+.btn {
+    padding: 0.375rem 0.75rem;
+    border: 1px solid transparent;
+    border-radius: 0.25rem;
+}
+
+.btn-primary {
+    background-color: #007bff;
+    border-color: #007bff;
+    color: #fff;
+}
+`)
+
+    // Mock file system
+    const mockFs = {
+      fileExistsSync: (path: string) => {
+        return path.includes('ComponentWithGlobalClasses.css') || path.includes('global.css')
+      },
+      readFileSync: (path: string) => {
+        if (path.includes('ComponentWithGlobalClasses.css')) {
+          return cssFile.getFullText()
+        }
+        if (path.includes('global.css')) {
+          return globalCssFile.getFullText()
+        }
+        return ''
+      },
+      writeFile: jest.fn(),
+      delete: jest.fn(),
+    }
+
+    project.getFileSystem = () => { return mockFs as any }
+
+    const [result] = await globalCssToCssModule({
+      project,
+      shouldWriteFiles: false,
+      shouldFormat: false,
+      transformOptions: {
+        globalCssFiles: ['global.css']
+      }
+    })
+
+    expect(result.files).toBeTruthy()
+
+    if (result.files) {
+      // Should return CSS module, transformed TypeScript file, and TypeScript declaration file
+      expect(result.files).toHaveLength(3)
+      const [cssModule, reactComponent, typeDefinitions] = result.files
+
+      // Should import CSS module
+      expect(reactComponent.source).toContain('import styles from "./ComponentWithGlobalClasses.module.css"')
+
+      // Should transform CSS module classes to CSS module references
+      expect(reactComponent.source).toContain('styles.myComponent')
+      expect(reactComponent.source).toContain('styles.myComponentTitle')
+      expect(reactComponent.source).toContain('styles.myComponentButton')
+
+      // Should keep global classes as string literals (not transformed)
+      expect(reactComponent.source).toContain('"d-flex"')
+      expect(reactComponent.source).toContain('"text-primary"')
+      expect(reactComponent.source).toContain('"btn btn-primary"')
+
+      // Should add classNames import since we have mixed usage
+      expect(reactComponent.source).toContain('import classNames from "classnames"')
+
+      // CSS module should be created with component-specific classes
+      expect(cssModule.source).toContain('.myComponent')
+      expect(cssModule.source).toContain('.myComponentTitle')
+      expect(cssModule.source).toContain('.myComponentButton')
+    }
+  }, 15000)
+
 })

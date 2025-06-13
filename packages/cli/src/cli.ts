@@ -20,6 +20,7 @@ interface CodemodCliOptions extends TransformOptions {
   format: boolean
   transform: string
   reportPath?: string
+  globalCssFiles?: string[]
 }
 
 const PROJECT_ROOT = path.resolve(__dirname, '../../../')
@@ -30,6 +31,9 @@ program
   .option('-w, --write [write]', 'Persist codemod changes to the filesystem', false)
   .option('-t, --transform <transform>', 'Absolute or relative to project root path to a transform module')
   .option('-r, --report-path <path>', 'Path where to save the HTML report of classes preventing conversion')
+  .option('-g, --global-css-files <file>', 'Path to global CSS file containing classes that should not prevent conversion (can be used multiple times)', (value: string, previous: string[] = []) => {
+    return [...previous, value]
+  })
   .argument('<fileGlob>', 'Absolute or relative to project root file glob to change files based on')
   .allowUnknownOption(true)
   .enablePositionalOptions(true)
@@ -39,11 +43,14 @@ program
 
         Transform-specific options can be passed via using '--option=value' syntax:
         yarn transform --write --tagToConvert=Link -t ./transformPath.ts 'globPath/**/*.{ts,tsx}'
+
+        Example with global CSS files (for globalCssToCssModule transform):
+        yarn transform --write --global-css-files src/styles/bootstrap.css --global-css-files src/styles/global.css -t ./transforms/globalCssToCssModule.ts 'src/**/*.tsx'
     `
   )
   .action(async (commandArgument: string, options: CodemodCliOptions) => {
     const { fileGlob, transformOptions } = parseOptions(commandArgument)
-    const { write: shouldWriteFiles, format: shouldFormat, transform, reportPath } = options
+    const { write: shouldWriteFiles, format: shouldFormat, transform, reportPath, globalCssFiles } = options
 
     // Handle tilde expansion
     const expandedFileGlob = fileGlob.startsWith('~')
@@ -71,6 +78,7 @@ program
       transformOptions: {
         ...transformOptions,
         reportPath,
+        globalCssFiles,
       },
     }
 

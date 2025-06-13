@@ -5,6 +5,7 @@ import { ManualChangesReported } from '@sourcegraph/codemod-common'
 
 export interface TransformOptions {
   reportPath?: string
+  globalCssFiles?: string[]
   [key: string]: unknown
 }
 

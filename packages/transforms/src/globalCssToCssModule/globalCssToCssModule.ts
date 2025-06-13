@@ -22,7 +22,58 @@ interface ClassUsage {
 
 interface GlobalCssToCssModuleOptions {
   reportPath?: string
+  globalCssFiles?: string[]
   [key: string]: unknown
+}
+
+/**
+ * Extract CSS class names from a CSS file content.
+ * This function parses CSS and extracts all class selectors.
+ */
+function extractCssClassNames(cssContent: string): Set<string> {
+  const classNames = new Set<string>()
+
+  // Match CSS class selectors at the beginning of selectors or after whitespace/comma
+  // This regex matches .className but not :global(.className) and avoids matching numbers in values
+  const classRegex = /(?<!:global\()(?:^|[\s+,>~])\.([\w-]+)(?=[\s#+,.:>[{~]|$)/gm
+  let match
+
+  while ((match = classRegex.exec(cssContent)) !== null) {
+    const className = match[1]
+    if (className) {
+      classNames.add(className)
+    }
+  }
+
+  return classNames
+}
+
+/**
+ * Load and extract class names from global CSS files.
+ */
+function loadGlobalCssClassNames(globalCssFiles: string[], fs: any): Set<string> {
+  const globalClassNames = new Set<string>()
+
+  for (const globalCssFile of globalCssFiles) {
+    try {
+      if (fs.fileExistsSync(globalCssFile)) {
+        const cssContent = fs.readFileSync(globalCssFile, 'utf8')
+        const classNames = extractCssClassNames(cssContent)
+
+        for (const className of classNames) {
+          globalClassNames.add(className)
+        }
+
+        signale.info(`Loaded ${classNames.size} global CSS classes from ${globalCssFile}`)
+      } else {
+        signale.warn(`Global CSS file not found: ${globalCssFile}`)
+      }
+    } catch (error) {
+      signale.error(`Error reading global CSS file ${globalCssFile}:`, error)
+    }
+  }
+
+  return globalClassNames
 }
 
 /**
@@ -36,11 +87,27 @@ interface GlobalCssToCssModuleOptions {
  * 6) Add `classNames` import to the `.tsx` file if needed.
  * 7) Add `.module.css` import to the `.tsx` file.
  *
+ * Options:
+ * - `reportPath`: Path to generate a report of classes that prevent conversion
+ * - `globalCssFiles`: Array of paths to global CSS files containing classes that shouldn't prevent conversion
+ *
+ * Example usage with global CSS files:
+ * ```ts
+ * await globalCssToCssModule({
+ *   project,
+ *   transformOptions: {
+ *     globalCssFiles: ['src/styles/bootstrap.css', 'src/styles/global.css']
+ *   }
+ * })
+ * ```
  */
 export const globalCssToCssModule: Codemod<GlobalCssToCssModuleOptions> = context => {
   const { project, shouldWriteFiles, shouldFormat, transformOptions } = context
-  const { reportPath } = transformOptions || {}
+  const { reportPath, globalCssFiles = [] } = transformOptions || {}
   const fs = project.getFileSystem()
+
+  // Load global CSS class names that shouldn't prevent conversion
+  const globalClassNames = loadGlobalCssClassNames(globalCssFiles, fs)
 
   // Track classes that prevent conversion
   const classUsages = new Map<string, ClassUsage>()
@@ -92,7 +159,7 @@ export const globalCssToCssModule: Codemod<GlobalCssToCssModuleOptions> = contex
     const { dir, name } = path.parse(cssFilePath)
     const cssModuleFileName = path.join(dir, `${name}.module.css`)
 
-    // Track classes that prevent conversion
+    // Track classes that prevent conversion (excluding global classes)
     const sourceText = tsSourceFile.getFullText()
     const classNameRegex = /className=["']([^"']+)["']/g
     let match
@@ -100,7 +167,7 @@ export const globalCssToCssModule: Codemod<GlobalCssToCssModuleOptions> = contex
     while ((match = classNameRegex.exec(sourceText)) !== null) {
       const classNames = match[1].split(/\s+/)
       for (const className of classNames) {
-        if (!exportNameMap[className]) {
+        if (!exportNameMap[className] && !globalClassNames.has(className)) {
           const usage = classUsages.get(className) || {
             className,
             occurrences: 0,
@@ -115,7 +182,7 @@ export const globalCssToCssModule: Codemod<GlobalCssToCssModuleOptions> = contex
       }
     }
 
-    const wasTransformed = transformComponentFile({ tsSourceFile, exportNameMap, cssModuleFileName })
+    const wasTransformed = transformComponentFile({ tsSourceFile, exportNameMap, cssModuleFileName, globalClassNames })
 
     // Only create CSS module and process files if transformation was successful
     if (wasTransformed) {
