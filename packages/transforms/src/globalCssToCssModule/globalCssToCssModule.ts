@@ -80,7 +80,7 @@ export const globalCssToCssModule: Codemod = context => {
 
     // Only create CSS module and process files if transformation was successful
     if (wasTransformed) {
-      const { css: cssModuleSource, filePath: actualCssModuleFileName } = await transformFileToCssModule({
+      const { css: cssModuleSource, filePath: actualCssModuleFileName, typeDefinitions, typeDefinitionsPath } = await transformFileToCssModule({
         sourceCss,
         sourceFilePath: cssFilePath,
       })
@@ -110,12 +110,14 @@ export const globalCssToCssModule: Codemod = context => {
        *
        * 1. Update TS file with a new source that uses CSS module.
        * 2. Create a new CSS module file.
-       * 3. Delete redundant CSS file that's replaced with CSS module.
+       * 3. Create type definitions file.
+       * 4. Delete redundant CSS file that's replaced with CSS module.
        */
       const fsWritePromise = shouldWriteFiles
         ? Promise.all([
           tsSourceFile.save(),
           fs.writeFile(actualCssModuleFileName, formattedCssModuleSource),
+          fs.writeFile(typeDefinitionsPath, typeDefinitions),
           fs.delete(cssFilePath),
         ])
         : undefined
@@ -128,6 +130,10 @@ export const globalCssToCssModule: Codemod = context => {
           {
             source: formattedCssModuleSource,
             path: path.resolve(parsedTsFilePath.dir, actualCssModuleFileName),
+          },
+          {
+            source: typeDefinitions,
+            path: path.resolve(parsedTsFilePath.dir, typeDefinitionsPath),
           },
           {
             source: tsSourceFile.getFullText(),
