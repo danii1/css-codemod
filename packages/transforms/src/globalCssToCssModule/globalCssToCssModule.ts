@@ -10,8 +10,20 @@ import { formatWithPrettierEslint, getImportDeclarationByModuleSpecifier } from 
 
 import { getCssModuleExportNameMap } from './postcss/getCssModuleExportNameMap'
 import { transformFileToCssModule } from './postcss/transformFileToCssModule'
+import { generateReport } from './report/generateReport'
 import { STYLES_IDENTIFIER } from './ts/processNodesWithClassName'
 import { transformComponentFile } from './ts/transformComponentFile'
+
+interface ClassUsage {
+  className: string
+  occurrences: number
+  files: string[]
+}
+
+interface GlobalCssToCssModuleOptions {
+  reportPath?: string
+  [key: string]: unknown
+}
 
 /**
  * Convert globally scoped stylesheet tied to the React component into a CSS Module.
@@ -25,9 +37,13 @@ import { transformComponentFile } from './ts/transformComponentFile'
  * 7) Add `.module.css` import to the `.tsx` file.
  *
  */
-export const globalCssToCssModule: Codemod = context => {
-  const { project, shouldWriteFiles, shouldFormat } = context
+export const globalCssToCssModule: Codemod<GlobalCssToCssModuleOptions> = context => {
+  const { project, shouldWriteFiles, shouldFormat, transformOptions } = context
+  const { reportPath } = transformOptions || {}
   const fs = project.getFileSystem()
+
+  // Track classes that prevent conversion
+  const classUsages = new Map<string, ClassUsage>()
 
   /**
    * Find `.tsx` files with co-located `.css` file.
@@ -75,6 +91,29 @@ export const globalCssToCssModule: Codemod = context => {
     // Generate a potential CSS module filename for the transformComponentFile check
     const { dir, name } = path.parse(cssFilePath)
     const cssModuleFileName = path.join(dir, `${name}.module.css`)
+
+    // Track classes that prevent conversion
+    const sourceText = tsSourceFile.getFullText()
+    const classNameRegex = /className=["']([^"']+)["']/g
+    let match
+
+    while ((match = classNameRegex.exec(sourceText)) !== null) {
+      const classNames = match[1].split(/\s+/)
+      for (const className of classNames) {
+        if (!exportNameMap[className]) {
+          const usage = classUsages.get(className) || {
+            className,
+            occurrences: 0,
+            files: [],
+          }
+          usage.occurrences++
+          if (!usage.files.includes(tsFilePath)) {
+            usage.files.push(tsFilePath)
+          }
+          classUsages.set(className, usage)
+        }
+      }
+    }
 
     const wasTransformed = transformComponentFile({ tsSourceFile, exportNameMap, cssModuleFileName })
 
@@ -132,12 +171,12 @@ export const globalCssToCssModule: Codemod = context => {
             path: path.resolve(parsedTsFilePath.dir, actualCssModuleFileName),
           },
           {
-            source: typeDefinitions,
-            path: path.resolve(parsedTsFilePath.dir, typeDefinitionsPath),
-          },
-          {
             source: tsSourceFile.getFullText(),
             path: tsSourceFile.getFilePath(),
+          },
+          {
+            source: typeDefinitions,
+            path: path.resolve(parsedTsFilePath.dir, typeDefinitionsPath),
           },
         ],
       }
@@ -154,8 +193,15 @@ export const globalCssToCssModule: Codemod = context => {
         },
       ],
     }
-
   })
 
-  return Promise.all(codemodResultPromises)
+  return Promise.all(codemodResultPromises).then(results => {
+    // Generate report if path is provided
+    if (reportPath && classUsages.size > 0) {
+      generateReport([...classUsages.values()], reportPath)
+      signale.info(`Generated report at ${reportPath}`)
+    }
+
+    return results
+  })
 }

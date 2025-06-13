@@ -21,6 +21,7 @@ function convertToCamelCase(className: string): string {
 // https://github.com/postcss/postcss-nested/blob/main/index.js
 export function postcssToCssModulePlugin(options: PostcssToCssModulePluginOptions = {}): AcceptedPlugin {
   const { globalTopLevelClasses = ['.theme-light', '.theme-dark'] } = options
+  let definedClasses: Set<string>
 
   return {
     postcssPlugin: 'postcss-to-css-module',
@@ -29,6 +30,62 @@ export function postcssToCssModulePlugin(options: PostcssToCssModulePluginOption
         // Remove default spacing applied by `postcss`.
         root.last.raws.before = undefined
       }
+
+      // Collect all class names defined in this CSS file
+      definedClasses = new Set<string>()
+
+      // Collect classes that are actually defined (not just referenced)
+      const collectDefinedClassNames = (rule: Rule): void => {
+        // Only collect from truly root-level rules (not nested rules)
+        if (!isRoot(rule.parent)) {
+          return
+        }
+
+        const selector = rule.selector
+
+        // Skip rules that are inside :global() - these are global references
+        if (selector.includes(':global(')) {
+          return
+        }
+
+        // Extract class names that are being defined at the root level
+        const classMatches = selector.match(/^\.([A-Z_a-z][\w-]*)/g) // Only root-level classes
+        if (classMatches) {
+          for (const match of classMatches) {
+            const className = match.slice(1) // Remove the dot
+            definedClasses.add(className)
+            // Also add the camelCase version if it would be converted
+            if (className.includes('_') || className.includes('-') || /^[A-Z]/.test(className)) {
+              definedClasses.add(convertToCamelCase(className))
+            }
+          }
+        }
+
+        // Also collect BEM-style nested selectors that will be flattened
+        // e.g., .repo-header &__button becomes .repoHeaderButton
+        // We need to walk through the rule's children to find these
+        rule.walkRules(childRule => {
+          const childSelector = childRule.selector
+          if (childSelector.includes('&__') || childSelector.includes('&_')) {
+            const parentMatch = selector.match(/^\.([A-Z_a-z][\w-]*)/)
+            if (parentMatch) {
+              const parentClass = parentMatch[1]
+              const bemMatches = childSelector.match(/&(_{1,2}[A-Z_a-z][\w-]*)/g)
+              if (bemMatches) {
+                for (const bemMatch of bemMatches) {
+                  const bemSuffix = bemMatch.slice(1) // Remove &
+                  const fullClassName = parentClass + bemSuffix
+                  definedClasses.add(fullClassName)
+                  definedClasses.add(convertToCamelCase(fullClassName))
+                }
+              }
+            }
+          }
+        })
+      }
+
+      // Collect from all rules in the root
+      root.walkRules(collectDefinedClassNames)
     },
     Rule(parentRule) {
       const isRootRule = isRoot(parentRule.parent)
@@ -97,20 +154,20 @@ export function postcssToCssModulePlugin(options: PostcssToCssModulePluginOption
       // https://docs.sourcegraph.com/dev/background-information/web/styling#css-modules
       parentRule.each(child => {
         if (child.type === 'rule') {
-          child.selectors = updateChildSelectors(parentRule, child)
+          child.selectors = updateChildSelectors(parentRule, child, definedClasses)
         }
       })
     },
   }
 }
 
-function updateChildSelectors(parent: Rule, child: Rule): string[] {
+function updateChildSelectors(parent: Rule, child: Rule, definedClasses: Set<string>): string[] {
   let shouldRemoveNesting = false
 
   const updatedChildSelectors = child.selectors.reduce<string[]>((result, selectorString) => {
     if (selectorString.length !== 0) {
       const selectorNode = parse(selectorString, child)
-      shouldRemoveNesting = replaceSelectorNodesIfNeeded(selectorNode, parent.selector)
+      shouldRemoveNesting = replaceSelectorNodesIfNeeded(selectorNode, parent.selector, definedClasses)
 
       result.push(selectorNode.toString())
     }
@@ -149,7 +206,7 @@ function updateChildSelectors(parent: Rule, child: Rule): string[] {
   return updatedChildSelectors
 }
 
-function replaceSelectorNodesIfNeeded(nodes: Selector, parentSelector: string): boolean {
+function replaceSelectorNodesIfNeeded(nodes: Selector, parentSelector: string, definedClasses: Set<string>): boolean {
   return nodes.reduce<boolean>((shouldRemoveNesting, node, index) => {
     /**
      * Only wrap classes in :global() if they are not defined in the same file
@@ -166,15 +223,21 @@ function replaceSelectorNodesIfNeeded(nodes: Selector, parentSelector: string): 
     if (node.type === 'class' || node.type === 'id') {
       const className = node.toString().replace(/^\./, '') // Remove leading dot
 
-      // If the class follows our naming conventions (has underscores, hyphens, or PascalCase)
-      // convert it to camelCase instead of wrapping in :global()
-      if (className.includes('_') || className.includes('-') || /^[A-Z]/.test(className)) {
+      // Check if this class is defined in the current CSS file
+      const isDefinedInFile = definedClasses.has(className) ||
+        definedClasses.has(convertToCamelCase(className))
+
+      if (isDefinedInFile && (className.includes('_') || className.includes('-') || /^[A-Z]/.test(className))) {
+        // If the class is defined in this file and follows our naming conventions,
+        // convert it to camelCase
         const camelCaseClassName = convertToCamelCase(className)
         node.replaceWith(parse('.' + camelCaseClassName))
-      } else {
+      } else if (!isDefinedInFile) {
+        // If the class is not defined in this file, wrap it in :global()
         const globalClass = wrapSelectorInGlobalKeyword(node.toString())
         node.replaceWith(parse(globalClass))
       }
+      // If the class is defined in the file but doesn't follow naming conventions, leave it as is
     }
 
     if (node.type === 'nesting') {

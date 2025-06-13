@@ -12,6 +12,7 @@
     "transform": "yarn workspace @sourcegraph/codemod-cli transform",
     "transform-css": "yarn run transform -t packages/transforms/src/globalCssToCssModule --write true",
     "test": "jest",
+    "test:css": "yarn test -- packages/transforms/src/globalCssToCssModule",
     "release": "yarn build && yarn changeset publish",
     "format": "prettier '**/*.{js?(on),ts?(x),scss,md,yml}' --write --list-different  --ignore-path ./.prettierignore",
     "format:check": "yarn format --write=false",

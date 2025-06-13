@@ -392,9 +392,9 @@ export const ComponentWithAllCssModuleClasses = () => {
     expect(result.files).toBeTruthy()
 
     if (result.files) {
-      // Should return both CSS module and transformed TypeScript file
-      expect(result.files).toHaveLength(2)
-      const [cssModule, reactComponent] = result.files
+      // Should return CSS module, transformed TypeScript file, and TypeScript declaration file
+      expect(result.files).toHaveLength(3)
+      const [cssModule, reactComponent, typeDefinitions] = result.files
 
       // Should import CSS module
       expect(reactComponent.source).toContain('import styles from "./ComponentWithAllCssModuleClasses.module.css"')

@@ -3,29 +3,32 @@ import { Project, SourceFile } from 'ts-morph'
 
 import { ManualChangesReported } from '@sourcegraph/codemod-common'
 
-export interface TransformOptions extends Object {}
+export interface TransformOptions {
+  reportPath?: string
+  [key: string]: unknown
+}
 
 export interface CodemodContext<T extends TransformOptions = TransformOptions> {
-    project: Project
-    transformOptions?: T
-    /** If `true` persist changes made by the codemod to the filesystem. */
-    shouldWriteFiles?: boolean
-    /** If `true` format Typescript source files with `prettier-eslint`. */
-    shouldFormat?: boolean
+  project: Project
+  transformOptions?: T
+  /** If `true` persist changes made by the codemod to the filesystem. */
+  shouldWriteFiles?: boolean
+  /** If `true` format Typescript source files with `prettier-eslint`. */
+  shouldFormat?: boolean
 }
 
 export interface CodemodResultFile {
-    source: string
-    path: string
+  source: string
+  path: string
 }
 
 export interface CodemodResult {
-    target: SourceFile
-    manualChangesReported: ManualChangesReported
-    files?: CodemodResultFile[]
-    fsWritePromise?: Promise<unknown>
+  target: SourceFile
+  manualChangesReported: ManualChangesReported
+  files?: CodemodResultFile[]
+  fsWritePromise?: Promise<unknown>
 }
 
 export type Codemod<T extends TransformOptions = TransformOptions> = (
-    codemodContext: CodemodContext<T>
+  codemodContext: CodemodContext<T>
 ) => Promise<CodemodResult[]>

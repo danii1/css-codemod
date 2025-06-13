@@ -19,6 +19,7 @@ interface CodemodCliOptions extends TransformOptions {
   write: boolean
   format: boolean
   transform: string
+  reportPath?: string
 }
 
 const PROJECT_ROOT = path.resolve(__dirname, '../../../')
@@ -28,6 +29,7 @@ program
   .option('-f, --format [format]', 'Format Typescript source files with ESLint', false)
   .option('-w, --write [write]', 'Persist codemod changes to the filesystem', false)
   .option('-t, --transform <transform>', 'Absolute or relative to project root path to a transform module')
+  .option('-r, --report-path <path>', 'Path where to save the HTML report of classes preventing conversion')
   .argument('<fileGlob>', 'Absolute or relative to project root file glob to change files based on')
   .allowUnknownOption(true)
   .enablePositionalOptions(true)
@@ -41,7 +43,7 @@ program
   )
   .action(async (commandArgument: string, options: CodemodCliOptions) => {
     const { fileGlob, transformOptions } = parseOptions(commandArgument)
-    const { write: shouldWriteFiles, format: shouldFormat, transform } = options
+    const { write: shouldWriteFiles, format: shouldFormat, transform, reportPath } = options
 
     // Handle tilde expansion
     const expandedFileGlob = fileGlob.startsWith('~')
@@ -66,7 +68,10 @@ program
       project,
       shouldWriteFiles,
       shouldFormat,
-      transformOptions,
+      transformOptions: {
+        ...transformOptions,
+        reportPath,
+      },
     }
 
     const results = await (codemod as Codemod)(codemodContext)
