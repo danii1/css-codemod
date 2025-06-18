@@ -148,8 +148,8 @@ function findClassNameUsageInProject(
                 // Template literal: className={\`...className...\`}
                 // Match className as standalone or separated by whitespace, not as substring
                 new RegExp(`className=\\{[\`](?:[^\`]*\\s)?${escapeRegExp(className)}(?:\\s[^\`]*)?[\`]\\}`, 'g'),
-                // classNames utility: classNames('className', ...) - exact string match
-                new RegExp(`classNames\\([^)]*["'\`]${escapeRegExp(className)}["'\`][^)]*\\)`, 'g'),
+                // Class name utilities: classNames(), cn(), clsx() - exact string match
+                new RegExp(`(?:classNames|cn|clsx)\\([^)]*["'\`]${escapeRegExp(className)}["'\`][^)]*\\)`, 'g'),
               ]
 
               const hasMatch = patterns.some(pattern => { return pattern.test(content) })
