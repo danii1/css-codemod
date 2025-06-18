@@ -140,13 +140,15 @@ function findClassNameUsageInProject(
             for (const className of classNames) {
               // Create regex patterns to match class usage
               const patterns = [
-                // CSS selector: .className
+                // CSS selector: .className (must be followed by CSS delimiter or end of line)
                 new RegExp(`\\.${escapeRegExp(className)}(?=[\\s#+,.:>[{~]|$)`, 'g'),
                 // TSX className: className="...className..." or className='...className...'
-                new RegExp(`className=["'][^"']*\\b${escapeRegExp(className)}\\b[^"']*["']`, 'g'),
+                // Match className as standalone or separated by whitespace, not as substring
+                new RegExp(`className=["'](?:[^"']*\\s)?${escapeRegExp(className)}(?:\\s[^"']*)?["']`, 'g'),
                 // Template literal: className={\`...className...\`}
-                new RegExp(`className=\\{[\`][^\`]*\\b${escapeRegExp(className)}\\b[^\`]*[\`]\\}`, 'g'),
-                // classNames utility: classNames('className', ...)
+                // Match className as standalone or separated by whitespace, not as substring
+                new RegExp(`className=\\{[\`](?:[^\`]*\\s)?${escapeRegExp(className)}(?:\\s[^\`]*)?[\`]\\}`, 'g'),
+                // classNames utility: classNames('className', ...) - exact string match
                 new RegExp(`classNames\\([^)]*["'\`]${escapeRegExp(className)}["'\`][^)]*\\)`, 'g'),
               ]
 

@@ -15,3 +15,69 @@ while ((match = classRegex.exec(cssContent)) !== null) {
 }
 
 console.log('Found classes:', [...classNames])
+
+// Test script for class name regex patterns
+
+function escapeRegExp(string) {
+  return string.replace(/[$()*+.?[\\\]^{|}]/g, '\\$&')
+}
+
+function testClassNamePatterns(className, testStrings) {
+  console.log(`\n=== Testing patterns for className: "${className}" ===`)
+
+  // Current patterns
+  const patterns = [
+    // CSS selector: .className (must be followed by CSS delimiter or end of line)
+    new RegExp(`\\.${escapeRegExp(className)}(?=[\\s#+,.:>[{~]|$)`, 'g'),
+    // TSX className: className="...className..." or className='...className...'
+    // Use proper class name boundaries (whitespace, start/end of string)
+    new RegExp(`className=["'][^"']*(?:^|\\s)${escapeRegExp(className)}(?:\\s|$)[^"']*["']`, 'g'),
+    // Template literal: className={\`...className...\`}
+    // Use proper class name boundaries (whitespace, start/end of string)
+    new RegExp(`className=\\{[\`][^\`]*(?:^|\\s)${escapeRegExp(className)}(?:\\s|$)[^\`]*[\`]\\}`, 'g'),
+    // classNames utility: classNames('className', ...) - exact string match
+    new RegExp(`classNames\\([^)]*["'\`]${escapeRegExp(className)}["'\`][^)]*\\)`, 'g'),
+  ]
+
+  const patternNames = ['CSS selector', 'TSX className', 'Template literal', 'classNames utility']
+
+  testStrings.forEach(testString => {
+    console.log(`\nTesting: ${testString}`)
+    patterns.forEach((pattern, index) => {
+      const match = pattern.test(testString)
+      pattern.lastIndex = 0 // Reset regex state
+      console.log(`  ${patternNames[index]}: ${match ? 'MATCH' : 'no match'}`)
+    })
+  })
+}
+
+// Test cases
+const testStrings = [
+  // Should NOT match "Loading"
+  'className="AddOnsConfirmModal--Loading"',
+  'className="btn-Loading-state"',
+  'className="Loading-spinner"',
+  'className="spinner-Loading"',
+  'className={`AddOnsConfirmModal--Loading active`}',
+
+  // Should match "Loading"
+  'className="Loading"',
+  'className="Loading active"',
+  'className="active Loading"',
+  'className="active Loading disabled"',
+  'className={`Loading`}',
+  'className={`Loading active`}',
+  'className={`active Loading`}',
+  'classNames("Loading", "active")',
+
+  // CSS selectors - should NOT match
+  '.AddOnsConfirmModal--Loading { color: red; }',
+  '.btn-Loading-state:hover { opacity: 0.8; }',
+
+  // CSS selectors - should match
+  '.Loading { display: block; }',
+  '.Loading:hover { opacity: 0.8; }',
+  '.Loading, .active { display: block; }',
+]
+
+testClassNamePatterns('Loading', testStrings)
