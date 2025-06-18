@@ -7,9 +7,17 @@ interface ClassUsage {
   files: string[]
 }
 
+interface SkippedFile {
+  filePath: string
+  reason: string
+  conflictingClasses: string[]
+  conflictingFiles: string[]
+}
+
 export function generateReport(
   classUsages: ClassUsage[],
-  outputPath: string
+  outputPath: string,
+  skippedFiles: SkippedFile[] = []
 ): void {
   // Sort by occurrences in descending order
   const sortedUsages = [...classUsages].sort((a, b) => {
@@ -32,10 +40,14 @@ export function generateReport(
             margin: 0 auto;
             padding: 20px;
         }
-        h1 {
+        h1, h2 {
             color: #2c3e50;
             border-bottom: 2px solid #eee;
             padding-bottom: 10px;
+        }
+        h2 {
+            margin-top: 40px;
+            border-bottom: 1px solid #eee;
         }
         table {
             width: 100%;
@@ -63,11 +75,50 @@ export function generateReport(
             font-size: 0.9em;
             color: #666;
         }
+        .reason {
+            color: #f39c12;
+            font-weight: 500;
+        }
+        .conflicting-classes {
+            font-family: monospace;
+            color: #e74c3c;
+            font-size: 0.9em;
+        }
     </style>
 </head>
 <body>
     <h1>CSS Classes Preventing Conversion Report</h1>
-    <p>This report shows classes that prevent conversion to CSS modules, sorted by number of occurrences.</p>
+    
+    ${skippedFiles.length > 0 ? `
+    <h2>Skipped Files (${skippedFiles.length})</h2>
+    <p>These files were skipped due to class name conflicts in the project.</p>
+    <table>
+        <thead>
+            <tr>
+                <th>File Path</th>
+                <th>Reason</th>
+                <th>Conflicting Classes</th>
+                <th>Conflicting Files</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${skippedFiles.map(skipped => {
+    return `
+                <tr>
+                    <td class="files">${skipped.filePath}</td>
+                    <td class="reason">${skipped.reason}</td>
+                    <td class="conflicting-classes">${skipped.conflictingClasses.join(', ')}</td>
+                    <td class="files">${skipped.conflictingFiles.slice(0, 3).join('<br>')}${skipped.conflictingFiles.length > 3 ? `<br>... and ${skipped.conflictingFiles.length - 3} more` : ''}</td>
+                </tr>
+              `
+  }).join('')}
+        </tbody>
+    </table>
+    ` : ''}
+    
+    ${sortedUsages.length > 0 ? `
+    <h2>Classes Preventing Conversion (${sortedUsages.length})</h2>
+    <p>These classes prevent conversion to CSS modules, sorted by number of occurrences.</p>
     <table>
         <thead>
             <tr>
@@ -88,6 +139,7 @@ export function generateReport(
   }).join('')}
         </tbody>
     </table>
+    ` : ''}
 </body>
 </html>
 `

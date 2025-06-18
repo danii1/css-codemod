@@ -1,3 +1,4 @@
+import fs from 'fs'
 import path from 'path'
 
 import signale from 'signale'
@@ -20,9 +21,17 @@ interface ClassUsage {
   files: string[]
 }
 
+interface SkippedFile {
+  filePath: string
+  reason: string
+  conflictingClasses: string[]
+  conflictingFiles: string[]
+}
+
 interface GlobalCssToCssModuleOptions {
   reportPath?: string
   globalCssFiles?: string[]
+  projectDir?: string
   [key: string]: unknown
 }
 
@@ -77,6 +86,88 @@ function loadGlobalCssClassNames(globalCssFiles: string[], fs: any): Set<string>
 }
 
 /**
+ * Search for class name usage across the entire project directory.
+ * This function scans all CSS and TSX files in the project directory to find class name conflicts.
+ */
+function findClassNameUsageInProject(
+  classNames: string[],
+  projectDirectory: string,
+  excludeFiles: string[] = []
+): Map<string, string[]> {
+  const classUsageMap = new Map<string, string[]>()
+
+  // Initialize map with empty arrays for all class names
+  for (const className of classNames) {
+    classUsageMap.set(className, [])
+  }
+
+  try {
+    // Function to recursively scan directory
+    function scanDirectory(directoryPath: string): void {
+      const entries = fs.readdirSync(directoryPath, { withFileTypes: true })
+
+      for (const entry of entries) {
+        const fullPath = path.join(directoryPath, entry.name)
+
+        // Skip node_modules and other common directories
+        if (entry.isDirectory() && !['node_modules', '.git', 'dist', 'build', '.next'].includes(entry.name)) {
+          scanDirectory(fullPath)
+        } else if (entry.isFile() && /\.(tsx?|css|scss|less)$/i.test(entry.name)) {
+          // Skip files that are being processed (to avoid self-references)
+          if (excludeFiles.includes(fullPath)) {
+            continue
+          }
+
+          try {
+            const content = fs.readFileSync(fullPath, 'utf8')
+
+            // Check each class name for usage in this file
+            for (const className of classNames) {
+              // Create regex patterns to match class usage
+              const patterns = [
+                // CSS selector: .className
+                new RegExp(`\\.${escapeRegExp(className)}(?=[\\s#+,.:>[{~]|$)`, 'g'),
+                // TSX className: className="...className..." or className='...className...'
+                new RegExp(`className=["'][^"']*\\b${escapeRegExp(className)}\\b[^"']*["']`, 'g'),
+                // Template literal: className={\`...className...\`}
+                new RegExp(`className=\\{[\`][^\`]*\\b${escapeRegExp(className)}\\b[^\`]*[\`]\\}`, 'g'),
+                // classNames utility: classNames('className', ...)
+                new RegExp(`classNames\\([^)]*["'\`]${escapeRegExp(className)}["'\`][^)]*\\)`, 'g'),
+              ]
+
+              const hasMatch = patterns.some(pattern => { return pattern.test(content) })
+              if (hasMatch) {
+                const existingFiles = classUsageMap.get(className) || []
+                if (!existingFiles.includes(fullPath)) {
+                  existingFiles.push(fullPath)
+                  classUsageMap.set(className, existingFiles)
+                }
+              }
+            }
+          } catch (error) {
+            // Skip files that can't be read
+            signale.debug(`Could not read file ${fullPath}: ${String(error)}`)
+          }
+        }
+      }
+    }
+
+    scanDirectory(projectDirectory)
+  } catch (error) {
+    signale.warn(`Error scanning project directory ${projectDirectory}: ${String(error)}`)
+  }
+
+  return classUsageMap
+}
+
+/**
+ * Escape special regex characters in a string
+ */
+function escapeRegExp(string: string): string {
+  return string.replace(/[$()*+.?[\\\]^{|}]/g, '\\$&')
+}
+
+/**
  * Convert globally scoped stylesheet tied to the React component into a CSS Module.
  *
  * 1) Find `.tsx` file.
@@ -103,7 +194,7 @@ function loadGlobalCssClassNames(globalCssFiles: string[], fs: any): Set<string>
  */
 export const globalCssToCssModule: Codemod<GlobalCssToCssModuleOptions> = context => {
   const { project, shouldWriteFiles, shouldFormat, transformOptions } = context
-  const { reportPath, globalCssFiles = [] } = transformOptions || {}
+  const { reportPath, globalCssFiles = [], projectDir } = transformOptions || {}
   const fs = project.getFileSystem()
 
   // Load global CSS class names that shouldn't prevent conversion
@@ -111,6 +202,9 @@ export const globalCssToCssModule: Codemod<GlobalCssToCssModuleOptions> = contex
 
   // Track classes that prevent conversion
   const classUsages = new Map<string, ClassUsage>()
+
+  // Track files that were skipped due to class name conflicts
+  const skippedFiles: SkippedFile[] = []
 
   /**
    * Find `.tsx` files with co-located `.css` file.
@@ -159,6 +253,32 @@ export const globalCssToCssModule: Codemod<GlobalCssToCssModuleOptions> = contex
     const { dir, name } = path.parse(cssFilePath)
     const cssModuleFileName = path.join(dir, `${name}.module.css`)
 
+    // If projectDir is specified, check for class name conflicts across the entire project
+    let hasConflicts = false
+    const conflictingClasses: string[] = []
+    let conflictingFiles: string[] = []
+
+    if (projectDir) {
+      const cssClassNames = Object.keys(exportNameMap)
+      const projectUsageMap = findClassNameUsageInProject(
+        cssClassNames,
+        projectDir,
+        [tsFilePath, cssFilePath] // Exclude current files from conflict check
+      )
+
+      // Check for conflicts
+      for (const [className, usageFiles] of projectUsageMap.entries()) {
+        if (usageFiles.length > 0 && !globalClassNames.has(className)) {
+          hasConflicts = true
+          conflictingClasses.push(className)
+          conflictingFiles.push(...usageFiles)
+        }
+      }
+
+      // Remove duplicates from conflicting files
+      conflictingFiles = [...new Set(conflictingFiles)]
+    }
+
     // Track classes that prevent conversion (excluding global classes)
     const sourceText = tsSourceFile.getFullText()
     const classNameRegex = /className=["']([^"']+)["']/g
@@ -179,6 +299,35 @@ export const globalCssToCssModule: Codemod<GlobalCssToCssModuleOptions> = contex
           }
           classUsages.set(className, usage)
         }
+      }
+    }
+
+    // Skip transformation if there are project-wide conflicts
+    if (hasConflicts) {
+      signale.warn(
+        `Skipping transformation of ${tsFilePath} - class names are used elsewhere in the project.`,
+        `\nConflicting classes: ${conflictingClasses.join(', ')}`,
+        `\nConflicting files: ${conflictingFiles.slice(0, 5).join(', ')}${conflictingFiles.length > 5 ? ` and ${conflictingFiles.length - 5} more...` : ''}`
+      )
+
+      skippedFiles.push({
+        filePath: tsFilePath,
+        reason: 'Class names used elsewhere in project',
+        conflictingClasses,
+        conflictingFiles,
+      })
+
+      // Return the original file unchanged
+      return {
+        target: tsSourceFile,
+        manualChangesReported: {},
+        fsWritePromise: undefined,
+        files: [
+          {
+            source: tsSourceFile.getFullText(),
+            path: tsSourceFile.getFilePath(),
+          },
+        ],
       }
     }
 
@@ -264,10 +413,20 @@ export const globalCssToCssModule: Codemod<GlobalCssToCssModuleOptions> = contex
 
   return Promise.all(codemodResultPromises).then(results => {
     // Generate report if path is provided
-    if (reportPath && classUsages.size > 0) {
-      generateReport([...classUsages.values()], reportPath)
+    if (reportPath && (classUsages.size > 0 || skippedFiles.length > 0)) {
+      generateReport([...classUsages.values()], reportPath, skippedFiles)
       signale.info(`Generated report at ${reportPath}`)
     }
+
+    // Log summary
+    const processedCount = results.length
+    const skippedCount = skippedFiles.length
+    const transformedCount = processedCount - skippedCount
+
+    signale.success('Transformation complete:')
+    signale.info(`  - ${transformedCount} files transformed`)
+    signale.info(`  - ${skippedCount} files skipped due to conflicts`)
+    signale.info(`  - ${processedCount} total files processed`)
 
     return results
   })

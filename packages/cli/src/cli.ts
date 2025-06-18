@@ -21,6 +21,7 @@ interface CodemodCliOptions extends TransformOptions {
   transform: string
   reportPath?: string
   globalCssFiles?: string[]
+  projectDir?: string
 }
 
 const PROJECT_ROOT = path.resolve(__dirname, '../../../')
@@ -31,6 +32,7 @@ program
   .option('-w, --write [write]', 'Persist codemod changes to the filesystem', false)
   .option('-t, --transform <transform>', 'Absolute or relative to project root path to a transform module')
   .option('-r, --report-path <path>', 'Path where to save the HTML report of classes preventing conversion')
+  .option('-p, --project-dir <path>', 'Path to the project directory containing tsx/css files to be transformed (used for conflict detection scope)')
   .option('-g, --global-css-files <file>', 'Path to global CSS file containing classes that should not prevent conversion (can be used multiple times)', (value: string, previous: string[] = []) => {
     return [...previous, value]
   })
@@ -46,11 +48,14 @@ program
 
         Example with global CSS files (for globalCssToCssModule transform):
         yarn transform --write --global-css-files src/styles/bootstrap.css --global-css-files src/styles/global.css -t ./transforms/globalCssToCssModule.ts 'src/**/*.tsx'
+
+        Example with project directory (for globalCssToCssModule transform):
+        yarn transform --write --project-dir /path/to/project --global-css-files src/styles/bootstrap.css -t ./transforms/globalCssToCssModule.ts 'src/**/*.tsx'
     `
   )
   .action(async (commandArgument: string, options: CodemodCliOptions) => {
     const { fileGlob, transformOptions } = parseOptions(commandArgument)
-    const { write: shouldWriteFiles, format: shouldFormat, transform, reportPath, globalCssFiles } = options
+    const { write: shouldWriteFiles, format: shouldFormat, transform, reportPath, globalCssFiles, projectDir } = options
 
     // Handle tilde expansion
     const expandedFileGlob = fileGlob.startsWith('~')
@@ -58,9 +63,31 @@ program
       : fileGlob
 
     const projectGlob = path.isAbsolute(expandedFileGlob) ? expandedFileGlob : path.join(PROJECT_ROOT, expandedFileGlob)
-    const transformPath = path.isAbsolute(transform) ? transform : path.join(PROJECT_ROOT, transform)
+
+    // Handle project directory and transform path
+    let transformPath: string
+    let actualProjectDirectory: string
+
+    if (projectDir) {
+      // Handle tilde expansion for project directory
+      const expandedProjectDirectory = projectDir.startsWith('~')
+        ? path.join(os.homedir(), projectDir.slice(1))
+        : projectDir
+
+      // If project directory is specified, resolve it but keep transform path relative to PROJECT_ROOT
+      actualProjectDirectory = path.isAbsolute(expandedProjectDirectory) ? expandedProjectDirectory : path.join(PROJECT_ROOT, expandedProjectDirectory)
+      transformPath = path.isAbsolute(transform) ? transform : path.join(PROJECT_ROOT, transform)
+    } else {
+      // Use existing behavior
+      actualProjectDirectory = PROJECT_ROOT
+      transformPath = path.isAbsolute(transform) ? transform : path.join(PROJECT_ROOT, transform)
+    }
 
     signale.start(`Starting codemod "${transformPath}" with the project glob "${projectGlob}".`)
+
+    if (projectDir) {
+      signale.info(`Using project directory: "${actualProjectDirectory}"`)
+    }
 
     const project = new Project()
     project.addSourceFilesAtPaths(projectGlob)
@@ -79,6 +106,7 @@ program
         ...transformOptions,
         reportPath,
         globalCssFiles,
+        projectDir: actualProjectDirectory,
       },
     }
 
