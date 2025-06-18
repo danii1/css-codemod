@@ -112,7 +112,7 @@ function findClassNameUsageInProject(
         // Skip node_modules and other common directories
         if (entry.isDirectory() && !['node_modules', '.git', 'dist', 'build', '.next'].includes(entry.name)) {
           scanDirectory(fullPath)
-        } else if (entry.isFile() && /\.(tsx?|css|scss|less)$/i.test(entry.name)) {
+        } else if (entry.isFile() && /\.(tsx|css)$/i.test(entry.name)) {
           // Skip files that are being processed (to avoid self-references)
           if (excludeFiles.includes(fullPath)) {
             continue
