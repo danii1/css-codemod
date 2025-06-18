@@ -9,6 +9,7 @@ import { formatWithStylelint } from '@sourcegraph/codemod-toolkit-css'
 import { addClassNamesUtilImportIfNeeded } from '@sourcegraph/codemod-toolkit-packages'
 import { formatWithPrettierEslint, getImportDeclarationByModuleSpecifier } from '@sourcegraph/codemod-toolkit-ts'
 
+import { collectGitignorePatterns, isPathIgnored } from './gitignore-utils'
 import { getCssModuleExportNameMap } from './postcss/getCssModuleExportNameMap'
 import { transformFileToCssModule } from './postcss/transformFileToCssModule'
 import { generateReport } from './report/generateReport'
@@ -88,6 +89,7 @@ function loadGlobalCssClassNames(globalCssFiles: string[], fs: any): Set<string>
 /**
  * Search for class name usage across the entire project directory.
  * This function scans all CSS and TSX files in the project directory to find class name conflicts.
+ * Respects .gitignore files at all levels in the project.
  */
 function findClassNameUsageInProject(
   classNames: string[],
@@ -102,14 +104,27 @@ function findClassNameUsageInProject(
   }
 
   try {
+    // Collect all gitignore patterns from the project
+    const gitignoreMap = collectGitignorePatterns(projectDirectory)
+
     // Function to recursively scan directory
     function scanDirectory(directoryPath: string): void {
+      // Check if this directory should be ignored
+      if (isPathIgnored(directoryPath, gitignoreMap)) {
+        return
+      }
+
       const entries = fs.readdirSync(directoryPath, { withFileTypes: true })
 
       for (const entry of entries) {
         const fullPath = path.join(directoryPath, entry.name)
 
-        // Skip node_modules and other common directories
+        // Check if this path should be ignored by gitignore
+        if (isPathIgnored(fullPath, gitignoreMap)) {
+          continue
+        }
+
+        // Skip node_modules and other common directories (backup check)
         if (entry.isDirectory() && !['node_modules', '.git', 'dist', 'build', '.next'].includes(entry.name)) {
           scanDirectory(fullPath)
         } else if (entry.isFile() && /\.(tsx|css)$/i.test(entry.name)) {
