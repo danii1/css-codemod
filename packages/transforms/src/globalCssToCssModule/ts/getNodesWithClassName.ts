@@ -1,5 +1,7 @@
 import { StringLiteral, Identifier, TemplateExpression, NoSubstitutionTemplateLiteral, SyntaxKind, SourceFile, Node } from 'ts-morph'
 
+import { isClassNameUtilityIdentifier } from '@sourcegraph/codemod-toolkit-packages'
+
 export function getNodesWithClassName(sourceFile: SourceFile): (Identifier | StringLiteral | TemplateExpression | NoSubstitutionTemplateLiteral)[] {
   const jsxAttributes = sourceFile.getDescendantsOfKind(SyntaxKind.JsxAttribute)
   const classNameJsxAttributes = jsxAttributes.filter(identifier => {
@@ -37,8 +39,8 @@ export function getNodesWithClassName(sourceFile: SourceFile): (Identifier | Str
     const expression = callExpression.getExpression()
     if (expression.getKind() === SyntaxKind.Identifier) {
       const identifierName = expression.getText()
-      // Match common className utility function names: cn, classNames, clsx, etc.
-      const isClassNameUtility = /^(cn|classnames|clsx)$/i.test(identifierName)
+      // Use enhanced className utility detection instead of regex
+      const isClassNameUtility = isClassNameUtilityIdentifier(identifierName)
 
       if (!isClassNameUtility) {
         return false

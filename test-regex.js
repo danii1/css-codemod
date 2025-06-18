@@ -22,10 +22,21 @@ function escapeRegExp(string) {
   return string.replace(/[$()*+.?[\\\]^{|}]/g, '\\$&')
 }
 
+/**
+ * Create a flexible pattern that matches any className utility identifier
+ * This matches common patterns: cn, classNames, clsx, cx, etc.
+ */
+function createClassNameUtilityPattern(className) {
+  const escapedClassName = escapeRegExp(className)
+  // Pattern that matches common className utility naming patterns
+  const identifierPattern = '(?:cn|classnames|clsx|cx)'
+  return new RegExp(`${identifierPattern}\\([^)]*["'\`]${escapedClassName}["'\`][^)]*\\)`, 'gi')
+}
+
 function testClassNamePatterns(className, testStrings) {
   console.log(`\n=== Testing patterns for className: "${className}" ===`)
 
-  // Current patterns
+  // Updated patterns with flexible className utility detection
   const patterns = [
     // CSS selector: .className (must be followed by CSS delimiter or end of line)
     new RegExp(`\\.${escapeRegExp(className)}(?=[\\s#+,.:>[{~]|$)`, 'g'),
@@ -35,11 +46,11 @@ function testClassNamePatterns(className, testStrings) {
     // Template literal: className={\`...className...\`}
     // Use proper class name boundaries (whitespace, start/end of string)
     new RegExp(`className=\\{[\`][^\`]*(?:^|\\s)${escapeRegExp(className)}(?:\\s|$)[^\`]*[\`]\\}`, 'g'),
-    // classNames utility: classNames('className', ...) - exact string match
-    new RegExp(`classNames\\([^)]*["'\`]${escapeRegExp(className)}["'\`][^)]*\\)`, 'g'),
+    // Flexible className utility pattern: matches cn, classNames, clsx, cx, etc.
+    createClassNameUtilityPattern(className),
   ]
 
-  const patternNames = ['CSS selector', 'TSX className', 'Template literal', 'classNames utility']
+  const patternNames = ['CSS selector', 'TSX className', 'Template literal', 'Flexible className utility']
 
   testStrings.forEach(testString => {
     console.log(`\nTesting: ${testString}`)
@@ -51,7 +62,7 @@ function testClassNamePatterns(className, testStrings) {
   })
 }
 
-// Test cases
+// Test cases - now including different className utility names
 const testStrings = [
   // Should NOT match "Loading"
   'className="AddOnsConfirmModal--Loading"',
@@ -68,7 +79,12 @@ const testStrings = [
   'className={`Loading`}',
   'className={`Loading active`}',
   'className={`active Loading`}',
+
+  // Different className utility functions - should all match
   'classNames("Loading", "active")',
+  'cn("Loading", "active")',
+  'clsx("Loading", "active")',
+  'cx("Loading", "active")',
 
   // CSS selectors - should NOT match
   '.AddOnsConfirmModal--Loading { color: red; }',

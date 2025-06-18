@@ -6,7 +6,7 @@ import signale from 'signale'
 import { Codemod } from '@sourcegraph/codemod-cli'
 import { isDefined } from '@sourcegraph/codemod-common'
 import { formatWithStylelint } from '@sourcegraph/codemod-toolkit-css'
-import { addClassNamesUtilImportIfNeeded } from '@sourcegraph/codemod-toolkit-packages'
+import { addClassNamesUtilImportIfNeeded, CLASSNAME_UTILITY_IDENTIFIERS } from '@sourcegraph/codemod-toolkit-packages'
 import { formatWithPrettierEslint, getImportDeclarationByModuleSpecifier } from '@sourcegraph/codemod-toolkit-ts'
 
 import { collectGitignorePatterns, isPathIgnored } from './gitignore-utils'
@@ -148,8 +148,8 @@ function findClassNameUsageInProject(
                 // Template literal: className={\`...className...\`}
                 // Match className as standalone or separated by whitespace, not as substring
                 new RegExp(`className=\\{[\`](?:[^\`]*\\s)?${escapeRegExp(className)}(?:\\s[^\`]*)?[\`]\\}`, 'g'),
-                // Class name utilities: classNames(), cn(), clsx() - exact string match
-                new RegExp(`(?:classNames|cn|clsx)\\([^)]*["'\`]${escapeRegExp(className)}["'\`][^)]*\\)`, 'g'),
+                // Class name utilities: any identifier matching className utility patterns - exact string match
+                createClassNameUtilityPattern(className),
               ]
 
               const hasMatch = patterns.some(pattern => { return pattern.test(content) })
@@ -182,6 +182,17 @@ function findClassNameUsageInProject(
  */
 function escapeRegExp(string: string): string {
   return string.replace(/[$()*+.?[\\\]^{|}]/g, '\\$&')
+}
+
+/**
+ * Generate a regex pattern that matches className utility calls with any identifier
+ * that follows common naming patterns (cn, classNames, clsx, etc.)
+ */
+function createClassNameUtilityPattern(className: string): RegExp {
+  const escapedClassName = escapeRegExp(className)
+  // Use the same identifier pattern from our enhanced detection
+  const identifierPattern = CLASSNAME_UTILITY_IDENTIFIERS.source.slice(1, -1) // Remove ^ and $ anchors
+  return new RegExp(`(?:${identifierPattern})\\([^)]*["'\`]${escapedClassName}["'\`][^)]*\\)`, 'gi')
 }
 
 /**
