@@ -28,6 +28,7 @@ interface SkippedFile {
   reason: string
   conflictingClasses: string[]
   conflictingFiles: string[]
+  unusedClasses?: string[]
 }
 
 interface GlobalCssToCssModuleOptions {
@@ -40,20 +41,53 @@ interface GlobalCssToCssModuleOptions {
 /**
  * Extract CSS class names from a CSS file content.
  * This function parses CSS and extracts all class selectors.
+ * Excludes @keyframes names and class-like patterns in property values.
  */
 function extractCssClassNames(cssContent: string): Set<string> {
   const classNames = new Set<string>()
 
+  // Remove @keyframes blocks to avoid matching animation names
+  // This handles nested braces correctly by counting brace depth
+  let cssWithoutKeyframes = cssContent
+  const keyframesRegex = /@keyframes\s+[\w-]+\s*{/g
+  let keyframeMatch: RegExpExecArray | null = null
+
+  keyframeMatch = keyframesRegex.exec(cssWithoutKeyframes)
+  while (keyframeMatch !== null) {
+    const startIndex = keyframeMatch.index
+    let braceCount = 1
+    let currentIndex = keyframeMatch.index + keyframeMatch[0].length
+
+    // Find the matching closing brace
+    while (braceCount > 0 && currentIndex < cssWithoutKeyframes.length) {
+      if (cssWithoutKeyframes[currentIndex] === '{') {
+        braceCount++
+      } else if (cssWithoutKeyframes[currentIndex] === '}') {
+        braceCount--
+      }
+      currentIndex++
+    }
+
+    // Remove the entire @keyframes block
+    cssWithoutKeyframes = cssWithoutKeyframes.slice(0, startIndex) + cssWithoutKeyframes.slice(currentIndex)
+
+    // Reset regex
+    keyframesRegex.lastIndex = 0
+    keyframeMatch = keyframesRegex.exec(cssWithoutKeyframes)
+  }
+
   // Match CSS class selectors at the beginning of selectors or after whitespace/comma
   // This regex matches .className but not :global(.className) and avoids matching numbers in values
   const classRegex = /(?<!:global\()(?:^|[\s+,>~])\.([\w-]+)(?=[\s#+,.:>[{~]|$)/gm
-  let match
+  let classMatch: RegExpExecArray | null = null
 
-  while ((match = classRegex.exec(cssContent)) !== null) {
-    const className = match[1]
+  classMatch = classRegex.exec(cssWithoutKeyframes)
+  while (classMatch !== null) {
+    const className = classMatch[1]
     if (className) {
       classNames.add(className)
     }
+    classMatch = classRegex.exec(cssWithoutKeyframes)
   }
 
   return classNames
@@ -604,10 +638,10 @@ export const globalCssToCssModule: Codemod<GlobalCssToCssModuleOptions> = contex
       }
     }
 
-    const wasTransformed = transformComponentFile({ tsSourceFile, exportNameMap, cssModuleFileName, globalClassNames })
+    const transformResult = transformComponentFile({ tsSourceFile, exportNameMap, cssModuleFileName, globalClassNames })
 
     // Only create CSS module and process files if transformation was successful
-    if (wasTransformed) {
+    if (transformResult.success) {
       const { css: cssModuleSource, filePath: actualCssModuleFileName, typeDefinitions, typeDefinitionsPath } = await transformFileToCssModule({
         sourceCss,
         sourceFilePath: cssFilePath,
@@ -670,7 +704,18 @@ export const globalCssToCssModule: Codemod<GlobalCssToCssModuleOptions> = contex
         ],
       }
     }
-    // Transformation was skipped, return only the original TypeScript file
+    // Transformation was skipped, track the skip reason
+    if (!transformResult.success) {
+      skippedFiles.push({
+        filePath: tsFilePath,
+        reason: transformResult.reason || 'Unknown reason',
+        conflictingClasses: [],
+        conflictingFiles: [],
+        unusedClasses: transformResult.unusedClasses,
+      })
+    }
+
+    // Return only the original TypeScript file
     return {
       target: tsSourceFile,
       manualChangesReported: {},

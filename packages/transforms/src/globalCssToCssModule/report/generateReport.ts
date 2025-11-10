@@ -12,6 +12,7 @@ interface SkippedFile {
   reason: string
   conflictingClasses: string[]
   conflictingFiles: string[]
+  unusedClasses?: string[]
 }
 
 export function generateReport(
@@ -91,12 +92,13 @@ export function generateReport(
     
     ${skippedFiles.length > 0 ? `
     <h2>Skipped Files (${skippedFiles.length})</h2>
-    <p>These files were skipped due to class name conflicts in the project.</p>
+    <p>These files were skipped due to class name conflicts or unused classes.</p>
     <table>
         <thead>
             <tr>
                 <th>File Path</th>
                 <th>Reason</th>
+                <th>Unused Classes</th>
                 <th>Conflicting Classes</th>
                 <th>Conflicting Files</th>
             </tr>
@@ -107,8 +109,9 @@ export function generateReport(
                 <tr>
                     <td class="files">${skipped.filePath}</td>
                     <td class="reason">${skipped.reason}</td>
-                    <td class="conflicting-classes">${skipped.conflictingClasses.join(', ')}</td>
-                    <td class="files">${skipped.conflictingFiles.slice(0, 3).join('<br>')}${skipped.conflictingFiles.length > 3 ? `<br>... and ${skipped.conflictingFiles.length - 3} more` : ''}</td>
+                    <td class="conflicting-classes">${skipped.unusedClasses && skipped.unusedClasses.length > 0 ? skipped.unusedClasses.join(', ') : '-'}</td>
+                    <td class="conflicting-classes">${skipped.conflictingClasses.length > 0 ? skipped.conflictingClasses.join(', ') : '-'}</td>
+                    <td class="files">${skipped.conflictingFiles.length > 0 ? skipped.conflictingFiles.slice(0, 3).join('<br>') + (skipped.conflictingFiles.length > 3 ? `<br>... and ${skipped.conflictingFiles.length - 3} more` : '') : '-'}</td>
                 </tr>
               `
   }).join('')}

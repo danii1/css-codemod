@@ -7,11 +7,18 @@ import { getNodesWithClassName } from './getNodesWithClassName'
 import { processNodesWithClassName } from './processNodesWithClassName'
 import { splitClassName } from './splitClassName'
 
-interface TransformComponentFileOptions {
+export interface TransformComponentFileOptions {
   tsSourceFile: SourceFile
   exportNameMap: Record<string, string>
-  cssModuleFileName: string
+  cssModuleFileName?: string
   globalClassNames?: Set<string>
+}
+
+export interface TransformResult {
+  success: boolean
+  reason?: string
+  unusedClasses?: string[]
+  globalClasses?: string[]
 }
 
 /**
@@ -118,13 +125,13 @@ function hasGlobalClassNamesAfterTransformation(
   }
 }
 
-export function transformComponentFile(options: TransformComponentFileOptions): boolean {
+export function transformComponentFile(options: TransformComponentFileOptions): TransformResult {
   const { tsSourceFile, exportNameMap, globalClassNames = new Set() } = options
 
   // Skip transformation entirely if the component uses dynamic class names
   if (hasDynamicClassNames(tsSourceFile)) {
     signale.info(`Skipping transformation of ${tsSourceFile.getFilePath()} - contains dynamic class names`)
-    return false
+    return { success: false, reason: 'Contains dynamic class names' }
   }
 
   // Check for unused classes BEFORE doing any transformations
@@ -142,7 +149,7 @@ export function transformComponentFile(options: TransformComponentFileOptions): 
       `\nUnused classes: ${unusedClassNames.join(', ')}`,
       '\nPlease extract these classes to a separate CSS file or remove them before running the transformation.'
     )
-    return false
+    return { success: false, reason: 'Contains unused CSS classes', unusedClasses: unusedClassNames }
   }
 
   // Check if transformation would result in global class names remaining
@@ -155,7 +162,7 @@ export function transformComponentFile(options: TransformComponentFileOptions): 
       '\nPlease ensure all class names are defined in the CSS file, or extract global classes to a separate file.',
       `\nGlobal classes remaining: ${globalClasses.join(', ')}`
     )
-    return false
+    return { success: false, reason: 'Global class names would remain after transformation', globalClasses }
   }
 
   // Object to collect CSS classes usage during the actual transformation.
@@ -176,5 +183,5 @@ export function transformComponentFile(options: TransformComponentFileOptions): 
     })
   }
 
-  return true
+  return { success: true }
 }

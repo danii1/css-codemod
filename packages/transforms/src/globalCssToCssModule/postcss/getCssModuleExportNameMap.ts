@@ -29,6 +29,16 @@ function convertToCamelCase(className: string): string {
  * Get a mapping between export names that will be used in the TS file and CSS classes.
  */
 export async function getCssModuleExportNameMap(sourceCss: string): Promise<Record<string, string>> {
+  // Extract @keyframes names to exclude them from the export map
+  const keyframesNames = new Set<string>()
+  const keyframesRegex = /@keyframes\s+([\w-]+)/g
+  let keyframeMatch: RegExpExecArray | null = null
+  keyframeMatch = keyframesRegex.exec(sourceCss)
+  while (keyframeMatch !== null) {
+    keyframesNames.add(keyframeMatch[1])
+    keyframeMatch = keyframesRegex.exec(sourceCss)
+  }
+
   // First, get the transformed CSS with camelCase class names
   const transformedResult = await transformToCssModuleProcessor(sourceCss)
   const classNames = await sourceCssToClassNames(transformedResult.css)
@@ -61,16 +71,22 @@ export async function getCssModuleExportNameMap(sourceCss: string): Promise<Reco
     }
   }
 
-  const exportNameClassNamePairs: [string, string][] = Object.entries(classNames.exportTokens).map(
-    ([exportName, className]) => {
-      const classNameWithoutExportPrefix = className.replace(`_${EXPORT_NAME_PREFIX}__`, '')
+  const exportNameClassNamePairs: [string, string][] = Object.entries(classNames.exportTokens)
+    .filter(([exportName]) => {
+      // Filter out @keyframes animation names from the export map
+      // CSS Modules includes them as exports, but they're not CSS classes
+      return !keyframesNames.has(exportName)
+    })
+    .map(
+      ([exportName, className]) => {
+        const classNameWithoutExportPrefix = className.replace(`_${EXPORT_NAME_PREFIX}__`, '')
 
-      // Map back to original class name if it was transformed
-      const originalClassName = camelCaseToOriginalMap.get(classNameWithoutExportPrefix) || classNameWithoutExportPrefix
+        // Map back to original class name if it was transformed
+        const originalClassName = camelCaseToOriginalMap.get(classNameWithoutExportPrefix) || classNameWithoutExportPrefix
 
-      return [originalClassName, camelcase(exportName)]
-    }
-  )
+        return [originalClassName, camelcase(exportName)]
+      }
+    )
 
   /**
    * Initial export name map without removed nesting of the selectors:
