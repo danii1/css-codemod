@@ -62,13 +62,13 @@ function extractCssClassNames(cssContent: string): Set<string> {
 /**
  * Load and extract class names from global CSS files.
  */
-function loadGlobalCssClassNames(globalCssFiles: string[], fs: any): Set<string> {
+function loadGlobalCssClassNames(globalCssFiles: string[], fileSystem: FileSystemHost): Set<string> {
   const globalClassNames = new Set<string>()
 
   for (const globalCssFile of globalCssFiles) {
     try {
-      if (fs.fileExistsSync(globalCssFile)) {
-        const cssContent = fs.readFileSync(globalCssFile, 'utf8')
+      if (fileSystem.fileExistsSync(globalCssFile)) {
+        const cssContent = fileSystem.readFileSync(globalCssFile, 'utf8')
         const classNames = extractCssClassNames(cssContent)
 
         for (const className of classNames) {
@@ -85,6 +85,70 @@ function loadGlobalCssClassNames(globalCssFiles: string[], fs: any): Set<string>
   }
 
   return globalClassNames
+}
+
+/**
+ * Extract node_modules CSS imports from source files.
+ * These will be treated as global CSS since they're external dependencies.
+ * Excludes imports that match tsconfig path aliases (e.g., 'components/*', 'pages/*').
+ */
+function extractNodeModulesCssImports(
+  sourceFiles: SourceFile[],
+  project: Project,
+  fileSystem: FileSystemHost,
+  projectDirectory: string | undefined
+): string[] {
+  const nodeModulesCssFiles: string[] = []
+  const nodeModulesDirectory = projectDirectory ? path.join(projectDirectory, 'node_modules') : undefined
+
+  if (!nodeModulesDirectory) {
+    return nodeModulesCssFiles
+  }
+
+  // Get path aliases from tsconfig to exclude them
+  const compilerOptions = project.getCompilerOptions()
+  const paths = compilerOptions.paths || {}
+  const baseUrl = compilerOptions.baseUrl
+  const aliasPatterns = Object.keys(paths).map(alias => {
+    return new RegExp(`^${alias.replace(/\*/g, '.*')}$`)
+  })
+
+  for (const sourceFile of sourceFiles) {
+    const importDeclarations = sourceFile.getImportDeclarations()
+
+    for (const importDecl of importDeclarations) {
+      const moduleSpecifier = importDecl.getModuleSpecifierValue()
+
+      // Check if it's a CSS import (doesn't start with ./ or ../)
+      if (
+        moduleSpecifier.endsWith('.css') &&
+        !moduleSpecifier.endsWith('.module.css') &&
+        !moduleSpecifier.startsWith('./') &&
+        !moduleSpecifier.startsWith('../')
+      ) {
+        // Check if it matches any tsconfig path alias
+        const matchesAlias = aliasPatterns.some(pattern => pattern.test(moduleSpecifier))
+
+        // Also check if it resolves via baseUrl (e.g., 'styles/base.css')
+        let resolvesViaBaseUrl = false
+        if (baseUrl && !matchesAlias) {
+          const baseUrlPath = path.resolve(path.dirname(sourceFile.getFilePath()), baseUrl, moduleSpecifier)
+          // Check if it exists outside node_modules
+          resolvesViaBaseUrl = !baseUrlPath.includes('/node_modules/') && fileSystem.fileExistsSync(baseUrlPath)
+        }
+
+        // Only add to node_modules list if it doesn't match a path alias or baseUrl
+        if (!matchesAlias && !resolvesViaBaseUrl) {
+          const fullPath = path.join(nodeModulesDirectory, moduleSpecifier)
+          if (!nodeModulesCssFiles.includes(fullPath)) {
+            nodeModulesCssFiles.push(fullPath)
+          }
+        }
+      }
+    }
+  }
+
+  return nodeModulesCssFiles
 }
 
 /**
@@ -258,9 +322,48 @@ function resolveAliasedPath(
 }
 
 /**
+ * Check if a module specifier might be a node_modules import (not a path alias or baseUrl import)
+ */
+function isLikelyNodeModulesImport(
+  moduleSpecifier: string,
+  tsSourceFile: SourceFile,
+  project: Project,
+  fileSystem: FileSystemHost
+): boolean {
+  // Get path aliases from tsconfig
+  const compilerOptions = project.getCompilerOptions()
+  const paths = compilerOptions.paths || {}
+  const baseUrl = compilerOptions.baseUrl
+
+  // Create regex patterns from path aliases
+  const aliasPatterns = Object.keys(paths).map(alias => {
+    return new RegExp(`^${alias.replace(/\*/g, '.*')}$`)
+  })
+
+  // Check if it matches any path alias
+  const matchesAlias = aliasPatterns.some(pattern => {
+    return pattern.test(moduleSpecifier)
+  })
+  if (matchesAlias) {
+    return false // It's a path alias, not node_modules
+  }
+
+  // Check if it resolves via baseUrl
+  if (baseUrl) {
+    const baseUrlPath = path.resolve(path.dirname(tsSourceFile.getFilePath()), baseUrl, moduleSpecifier)
+    if (!baseUrlPath.includes('/node_modules/') && fileSystem.fileExistsSync(baseUrlPath)) {
+      return false // It's a baseUrl import, not node_modules
+    }
+  }
+
+  return true // Likely a node_modules import
+}
+
+/**
  * Find CSS import in a TypeScript source file.
  * Returns the path to the CSS file if found, undefined otherwise.
  * Skips CSS module imports (.module.css) as those are already transformed.
+ * Skips node_modules CSS imports as those are handled separately.
  * Supports both relative imports (./file.css) and absolute/aliased imports (components/file.css).
  */
 function findCssImportPath(tsSourceFile: SourceFile, project: Project, fileSystem: FileSystemHost): string | undefined {
@@ -273,7 +376,6 @@ function findCssImportPath(tsSourceFile: SourceFile, project: Project, fileSyste
     const moduleSpecifier = importDecl.getModuleSpecifierValue()
 
     // Skip CSS module imports (.module.css) as those are already transformed
-    // Skip node_modules CSS imports (e.g., 'swiper/swiper.min.css', 'react-date-range/dist/styles.css')
     if (!moduleSpecifier.endsWith('.css') || moduleSpecifier.endsWith('.module.css')) {
       continue
     }
@@ -284,6 +386,11 @@ function findCssImportPath(tsSourceFile: SourceFile, project: Project, fileSyste
     if (moduleSpecifier.startsWith('./') || moduleSpecifier.startsWith('../')) {
       cssFilePath = path.resolve(tsFileDirectory, moduleSpecifier)
     } else {
+      // Skip node_modules imports (they're handled separately as global CSS)
+      if (isLikelyNodeModulesImport(moduleSpecifier, tsSourceFile, project, fileSystem)) {
+        continue
+      }
+
       // Handle absolute/aliased imports (e.g., 'components/sidebar/index.css')
       // Use TypeScript's module resolution with tsconfig paths
       cssFilePath = resolveAliasedPath(moduleSpecifier, tsSourceFile, project, fileSystem)
@@ -328,8 +435,16 @@ export const globalCssToCssModule: Codemod<GlobalCssToCssModuleOptions> = contex
   const { reportPath, globalCssFiles = [], projectDir } = transformOptions || {}
   const fs = project.getFileSystem()
 
+  // Extract node_modules CSS imports and add them to global CSS files
+  const nodeModulesCssFiles = extractNodeModulesCssImports(project.getSourceFiles(), project, fs, projectDir)
+  const allGlobalCssFiles = [...globalCssFiles, ...nodeModulesCssFiles]
+
   // Load global CSS class names that shouldn't prevent conversion
-  const globalClassNames = loadGlobalCssClassNames(globalCssFiles, fs)
+  const globalClassNames = loadGlobalCssClassNames(allGlobalCssFiles, fs)
+
+  if (nodeModulesCssFiles.length > 0) {
+    signale.info(`Auto-detected ${nodeModulesCssFiles.length} CSS files from node_modules as global CSS`)
+  }
 
   // Track classes that prevent conversion
   const classUsages = new Map<string, ClassUsage>()
