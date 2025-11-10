@@ -1,5 +1,6 @@
 // Used for parsing a transform module.
 import 'ts-node/register/transpile-only'
+import fs from 'fs'
 import os from 'os'
 import path from 'path'
 
@@ -89,7 +90,48 @@ program
       signale.info(`Using project directory: "${actualProjectDirectory}"`)
     }
 
-    const project = new Project()
+    // Find the nearest tsconfig.json by walking up from the glob path
+    // This supports monorepos where tsconfig.json might be in a package directory
+    function findNearestTsConfig(startPath: string): string | undefined {
+      let currentDirectory = path.dirname(startPath)
+      const root = path.parse(currentDirectory).root
+
+      while (currentDirectory !== root) {
+        const tsConfigPath = path.join(currentDirectory, 'tsconfig.json')
+        if (fs.existsSync(tsConfigPath)) {
+          return tsConfigPath
+        }
+        currentDirectory = path.dirname(currentDirectory)
+      }
+
+      return undefined
+    }
+
+    // Find tsconfig from the glob path (where the files are) or from projectDir
+    let tsConfigPath: string | undefined
+    if (projectDir) {
+      // First try to find tsconfig near the files being transformed
+      tsConfigPath = findNearestTsConfig(projectGlob)
+
+      // If not found, try from the project directory
+      if (!tsConfigPath) {
+        tsConfigPath = findNearestTsConfig(actualProjectDirectory)
+      }
+
+      if (tsConfigPath) {
+        signale.info(`Using tsconfig: "${tsConfigPath}"`)
+      } else {
+        signale.warn('No tsconfig.json found - path aliases will not be resolved')
+      }
+    }
+
+    const project = tsConfigPath
+      ? new Project({
+          tsConfigFilePath: tsConfigPath,
+          skipAddingFilesFromTsConfig: true, // We'll add files manually via glob
+        })
+      : new Project()
+
     project.addSourceFilesAtPaths(projectGlob)
 
     const transformExports = Object.values(await import(transformPath))

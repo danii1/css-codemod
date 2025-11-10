@@ -2,7 +2,7 @@ import fs from 'fs'
 import path from 'path'
 
 import signale from 'signale'
-import type { FileSystemHost, SourceFile } from 'ts-morph'
+import type { FileSystemHost, Project, SourceFile } from 'ts-morph'
 
 import { Codemod } from '@sourcegraph/codemod-cli'
 import { isDefined } from '@sourcegraph/codemod-common'
@@ -197,13 +197,74 @@ function createClassNameUtilityPattern(className: string): RegExp {
 }
 
 /**
+ * Resolve path aliases from tsconfig paths configuration.
+ * Manually resolves CSS files since TypeScript's resolveModuleName only handles TS/JS files.
+ */
+function resolveAliasedPath(
+  moduleSpecifier: string,
+  tsSourceFile: SourceFile,
+  project: Project,
+  fileSystem: FileSystemHost
+): string | undefined {
+  const compilerOptions = project.getCompilerOptions()
+  const paths = compilerOptions.paths
+  const baseUrl = compilerOptions.baseUrl
+
+  if (!baseUrl) {
+    return undefined
+  }
+
+  // First, try to match against path aliases if configured
+  if (paths) {
+    for (const [alias, mappings] of Object.entries(paths)) {
+      // Convert alias pattern to regex (e.g., "components/*" -> "^components/(.*)$")
+      const aliasPattern = alias.replace(/\*/g, '(.*)')
+      const regex = new RegExp(`^${aliasPattern}$`)
+      const match = moduleSpecifier.match(regex)
+
+      if (match) {
+        // Try each mapping for this alias
+        for (const mapping of mappings) {
+          // Replace wildcards in mapping with captured groups
+          let resolvedPath = mapping
+          for (let groupIndex = 1; groupIndex < match.length; groupIndex++) {
+            resolvedPath = resolvedPath.replace('*', match[groupIndex])
+          }
+
+          // Resolve relative to baseUrl
+          const fullPath = path.resolve(path.dirname(tsSourceFile.getFilePath()), baseUrl, resolvedPath)
+
+          if (fileSystem.fileExistsSync(fullPath)) {
+            return fullPath
+          }
+        }
+      }
+    }
+  }
+
+  // If no alias matched, try resolving relative to baseUrl directly
+  // This handles imports like 'styles/base.css' when baseUrl is set but no path alias exists
+  const baseUrlPath = path.resolve(path.dirname(tsSourceFile.getFilePath()), baseUrl, moduleSpecifier)
+  if (fileSystem.fileExistsSync(baseUrlPath)) {
+    return baseUrlPath
+  }
+
+  // Debug logging for failed resolutions
+  if (process.env.DEBUG_CSS_TRANSFORM) {
+    signale.debug(`Failed to resolve aliased path: "${moduleSpecifier}" from ${tsSourceFile.getFilePath()}`)
+  }
+
+  return undefined
+}
+
+/**
  * Find CSS import in a TypeScript source file.
  * Returns the path to the CSS file if found, undefined otherwise.
  * Skips CSS module imports (.module.css) as those are already transformed.
+ * Supports both relative imports (./file.css) and absolute/aliased imports (components/file.css).
  */
-function findCssImportPath(tsSourceFile: SourceFile, fs: FileSystemHost): string | undefined {
-  const tsFilePath = tsSourceFile.getFilePath()
-  const tsFileDir = path.dirname(tsFilePath)
+function findCssImportPath(tsSourceFile: SourceFile, project: Project, fileSystem: FileSystemHost): string | undefined {
+  const tsFileDirectory = path.dirname(tsSourceFile.getFilePath())
 
   // Get all import declarations
   const importDeclarations = tsSourceFile.getImportDeclarations()
@@ -211,20 +272,26 @@ function findCssImportPath(tsSourceFile: SourceFile, fs: FileSystemHost): string
   for (const importDecl of importDeclarations) {
     const moduleSpecifier = importDecl.getModuleSpecifierValue()
 
-    // Check if it's a CSS import (relative path ending in .css)
     // Skip CSS module imports (.module.css) as those are already transformed
-    if (
-      moduleSpecifier.endsWith('.css') &&
-      !moduleSpecifier.endsWith('.module.css') &&
-      (moduleSpecifier.startsWith('./') || moduleSpecifier.startsWith('../'))
-    ) {
-      // Resolve the relative path
-      const cssFilePath = path.resolve(tsFileDir, moduleSpecifier)
+    // Skip node_modules CSS imports (e.g., 'swiper/swiper.min.css', 'react-date-range/dist/styles.css')
+    if (!moduleSpecifier.endsWith('.css') || moduleSpecifier.endsWith('.module.css')) {
+      continue
+    }
 
-      // Verify the file exists
-      if (fs.fileExistsSync(cssFilePath)) {
-        return cssFilePath
-      }
+    let cssFilePath: string | undefined
+
+    // Handle relative imports
+    if (moduleSpecifier.startsWith('./') || moduleSpecifier.startsWith('../')) {
+      cssFilePath = path.resolve(tsFileDirectory, moduleSpecifier)
+    } else {
+      // Handle absolute/aliased imports (e.g., 'components/sidebar/index.css')
+      // Use TypeScript's module resolution with tsconfig paths
+      cssFilePath = resolveAliasedPath(moduleSpecifier, tsSourceFile, project, fileSystem)
+    }
+
+    // Verify the file exists and return it
+    if (cssFilePath && fileSystem.fileExistsSync(cssFilePath)) {
+      return cssFilePath
     }
   }
 
@@ -287,7 +354,7 @@ export const globalCssToCssModule: Codemod<GlobalCssToCssModuleOptions> = contex
       }
 
       // First, try to find CSS import in the file
-      let cssFilePath = findCssImportPath(tsSourceFile, fs)
+      let cssFilePath = findCssImportPath(tsSourceFile, project, fs)
 
       // If no import found, fall back to co-located CSS file with matching name
       if (!cssFilePath) {
@@ -308,10 +375,27 @@ export const globalCssToCssModule: Codemod<GlobalCssToCssModuleOptions> = contex
     })
     .filter(isDefined)
 
+  // Log discovered CSS files for debugging
+  signale.info(`Found ${itemsToProcess.length} TSX files with CSS files`)
+
   if (itemsToProcess.length === 0) {
     signale.warn('No files to process!')
 
     return Promise.resolve([])
+  }
+
+  // Write list of discovered files to a debug file if in debug mode
+  if (process.env.DEBUG_CSS_TRANSFORM) {
+    const discoveredFiles = itemsToProcess.map(({ tsSourceFile, cssFilePath }) => {
+      return {
+        tsx: tsSourceFile.getFilePath(),
+        css: cssFilePath,
+      }
+    })
+    const debugOutput = JSON.stringify(discoveredFiles, null, 2)
+    const debugPath = process.env.DEBUG_CSS_TRANSFORM
+    fs.writeFileSync(debugPath, debugOutput)
+    signale.info(`Debug: Wrote discovered files to ${debugPath}`)
   }
 
   const codemodResultPromises = itemsToProcess.map(async ({ tsSourceFile, cssFilePath }) => {
