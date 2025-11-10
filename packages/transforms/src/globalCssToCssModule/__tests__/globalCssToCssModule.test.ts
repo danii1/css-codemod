@@ -6,6 +6,8 @@ import { globalCssToCssModule } from '../globalCssToCssModule'
 
 const TARGET_FILE = path.resolve(__dirname, './fixtures/MyComponent.tsx')
 const TARGET_FILE_WITH_CSS_IMPORT = path.resolve(__dirname, './fixtures/ComponentWithCssImport.tsx')
+const TARGET_FILE_WITH_INDEX_CSS = path.resolve(__dirname, './fixtures/ComponentWithIndexCss.tsx')
+const TARGET_FILE_WITH_MODULE_CSS = path.resolve(__dirname, './fixtures/ComponentWithModuleCss.tsx')
 const TARGET_FILE_WITH_UNDERSCORES = path.resolve(__dirname, './fixtures/ComponentWithUnderscores.tsx')
 const TARGET_FILE_WITH_HYPHENS = path.resolve(__dirname, './fixtures/ComponentWithHyphens.tsx')
 const TARGET_FILE_WITH_MIXED_NOTATION = path.resolve(__dirname, './fixtures/ComponentWithMixedNotation.tsx')
@@ -57,6 +59,41 @@ describe('globalCssToCssModule', () => {
       expect(cssModule.source).toMatchSnapshot()
       expect(reactComponent.source).toMatchSnapshot()
     }
+  }, 15000)
+
+  it('finds CSS files with non-matching names (e.g., index.css)', async () => {
+    const project = new Project()
+    project.addSourceFilesAtPaths(TARGET_FILE_WITH_INDEX_CSS)
+    const [{ files }] = await globalCssToCssModule({ project, shouldFormat: true })
+
+    expect(files).toBeTruthy()
+
+    if (files) {
+      const [cssModule, reactComponent] = files
+
+      // Check that the original CSS import is removed
+      expect(reactComponent.source).not.toContain("import './index.css'")
+
+      // Check that the CSS module import is added
+      expect(reactComponent.source).toContain("import styles from './index.module.css'")
+
+      // Check that class names are transformed
+      expect(reactComponent.source).toContain('styles.container')
+      expect(reactComponent.source).toContain('styles.title')
+      expect(reactComponent.source).toContain('styles.description')
+
+      expect(cssModule.source).toMatchSnapshot()
+      expect(reactComponent.source).toMatchSnapshot()
+    }
+  }, 15000)
+
+  it('skips files that already import .module.css', async () => {
+    const project = new Project()
+    project.addSourceFilesAtPaths(TARGET_FILE_WITH_MODULE_CSS)
+    const results = await globalCssToCssModule({ project, shouldFormat: true })
+
+    // Should return empty array since there's nothing to process
+    expect(results).toHaveLength(0)
   }, 15000)
 
   it('handles underscore-separated class names correctly', async () => {

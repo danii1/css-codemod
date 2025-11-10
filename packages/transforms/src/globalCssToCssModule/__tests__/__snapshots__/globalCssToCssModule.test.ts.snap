@@ -1,5 +1,39 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
+exports[`globalCssToCssModule finds CSS files with non-matching names (e.g., index.css) 1`] = `
+".container {
+    padding: 20px;
+}
+
+.title {
+    font-size: 24px;
+    font-weight: bold;
+}
+
+.description {
+    color: #666;
+}
+"
+`;
+
+exports[`globalCssToCssModule finds CSS files with non-matching names (e.g., index.css) 2`] = `
+"// @ts-nocheck
+import React from 'react'
+import styles from './index.module.css'
+
+export const ComponentWithIndexCss = () => {
+    return (
+        <div className={styles.container}>
+            <h1 className={styles.title}>Component with index.css</h1>
+            <p className={styles.description}>
+                This component imports index.css instead of matching the component name
+            </p>
+        </div>
+    )
+}
+"
+`;
+
 exports[`globalCssToCssModule handles PascalCase class names correctly 1`] = `
 ".contactHeader {
     display: flex;

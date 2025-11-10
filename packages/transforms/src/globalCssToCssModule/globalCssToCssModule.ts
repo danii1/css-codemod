@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 
 import signale from 'signale'
+import type { FileSystemHost, SourceFile } from 'ts-morph'
 
 import { Codemod } from '@sourcegraph/codemod-cli'
 import { isDefined } from '@sourcegraph/codemod-common'
@@ -196,15 +197,50 @@ function createClassNameUtilityPattern(className: string): RegExp {
 }
 
 /**
+ * Find CSS import in a TypeScript source file.
+ * Returns the path to the CSS file if found, undefined otherwise.
+ * Skips CSS module imports (.module.css) as those are already transformed.
+ */
+function findCssImportPath(tsSourceFile: SourceFile, fs: FileSystemHost): string | undefined {
+  const tsFilePath = tsSourceFile.getFilePath()
+  const tsFileDir = path.dirname(tsFilePath)
+
+  // Get all import declarations
+  const importDeclarations = tsSourceFile.getImportDeclarations()
+
+  for (const importDecl of importDeclarations) {
+    const moduleSpecifier = importDecl.getModuleSpecifierValue()
+
+    // Check if it's a CSS import (relative path ending in .css)
+    // Skip CSS module imports (.module.css) as those are already transformed
+    if (
+      moduleSpecifier.endsWith('.css') &&
+      !moduleSpecifier.endsWith('.module.css') &&
+      (moduleSpecifier.startsWith('./') || moduleSpecifier.startsWith('../'))
+    ) {
+      // Resolve the relative path
+      const cssFilePath = path.resolve(tsFileDir, moduleSpecifier)
+
+      // Verify the file exists
+      if (fs.fileExistsSync(cssFilePath)) {
+        return cssFilePath
+      }
+    }
+  }
+
+  return undefined
+}
+
+/**
  * Convert globally scoped stylesheet tied to the React component into a CSS Module.
  *
  * 1) Find `.tsx` file.
- * 2) Check if corresponding `.css` file exists in the same folder.
+ * 2) Check if the file imports a `.css` file (supports any naming convention: styles.css, index.css, etc.)
  * 3) Convert this `.css` file into `.module.css`.
  * 4) Get info about CSS class names and matching export tokens.
  * 5) Replace all matching class names with export tokens.
  * 6) Add `classNames` import to the `.tsx` file if needed.
- * 7) Add `.module.css` import to the `.tsx` file.
+ * 7) Update the CSS import to point to the new `.module.css` file.
  *
  * Options:
  * - `reportPath`: Path to generate a report of classes that prevent conversion
@@ -235,8 +271,9 @@ export const globalCssToCssModule: Codemod<GlobalCssToCssModuleOptions> = contex
   const skippedFiles: SkippedFile[] = []
 
   /**
-   * Find `.tsx` files with co-located `.css` file.
-   * For example `RepoHeader.tsx` should have matching `RepoHeader.css` in the same folder.
+   * Find `.tsx` files that either:
+   * 1. Import a `.css` file (supports any naming convention: styles.css, index.css, etc.)
+   * 2. Have a co-located `.css` file with the same name (legacy behavior)
    */
   const itemsToProcess = project
     .getSourceFiles()
@@ -249,9 +286,18 @@ export const globalCssToCssModule: Codemod<GlobalCssToCssModuleOptions> = contex
         return
       }
 
-      const cssFilePath = path.resolve(parsedTsFilePath.dir, `${parsedTsFilePath.name}.css`)
+      // First, try to find CSS import in the file
+      let cssFilePath = findCssImportPath(tsSourceFile, fs)
 
-      if (fs.fileExistsSync(cssFilePath)) {
+      // If no import found, fall back to co-located CSS file with matching name
+      if (!cssFilePath) {
+        const colocatedCssPath = path.resolve(parsedTsFilePath.dir, `${parsedTsFilePath.name}.css`)
+        if (fs.fileExistsSync(colocatedCssPath)) {
+          cssFilePath = colocatedCssPath
+        }
+      }
+
+      if (cssFilePath) {
         return {
           tsSourceFile,
           cssFilePath,
